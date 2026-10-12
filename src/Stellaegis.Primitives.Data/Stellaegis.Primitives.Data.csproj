@@ -9,6 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <InternalsVisibleTo Include="Stellaegis.Primitives.Tests" />
     <ProjectReference Include="..\Stellaegis.Primitives\Stellaegis.Primitives.csproj" />
   </ItemGroup>
 
