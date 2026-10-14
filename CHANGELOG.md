@@ -28,6 +28,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by default; `AllowAnyResource` declares that any resource is accessible.
 - A startup check, registered with the request context: a route labelled with an operation needs an
   authorization handler or `AllowAnyResource`, and every policy it requires must exist.
+- `ToStatusCode`, `ToProblemDetails` and `ToHttpResult`: the translation of `ErrorType`, `Error` and `Result`
+  to HTTP, the error code in a `code` extension and the message of a `Failure` hidden outside Development.
+- `AddErrorTranslation`: an endpoint filter answering `UserFacingException` with its status and message, and
+  `ArgumentException` with 400.
 
 ## [1.0.0] — 2026-10-12
 

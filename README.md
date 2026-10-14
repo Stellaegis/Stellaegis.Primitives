@@ -20,7 +20,7 @@ dependency, and code that exposes no endpoint takes no dependency on ASP.NET Cor
 | --- | --- | --- |
 | `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment` and `Actor`, the event marker and the publication port | .NET only |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
-| `Stellaegis.Primitives.AspNetCore` | The request context port, giving the compartment and the actor of a request, and the operations that let an application secure a module's routes and data | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
+| `Stellaegis.Primitives.AspNetCore` | The request context port, giving the compartment and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
 writes a relational database. Depending on `Stellaegis.Primitives.AspNetCore` says that it maps HTTP
@@ -52,9 +52,9 @@ it: `Error.Validation`, `Error.NotFound`, `Error.Conflict`, `Error.Unauthorized`
 `Error.PreconditionFailed` and `Error.Failure`. Two errors are equal when their code and category are
 equal. The message is not compared, so that rewording a message does not change how errors are matched.
 
-The documentation of each category gives the HTTP status it usually corresponds to — 404 for
-`NotFound`, for instance. That correspondence is a suggestion for the host. The library itself never
-produces an HTTP response.
+The documentation of each category gives the HTTP status it corresponds to — 404 for `NotFound`, for
+instance. `Stellaegis.Primitives` itself never produces an HTTP response: the translation lives in
+`Stellaegis.Primitives.AspNetCore` (see *Errors as HTTP answers*).
 
 ## Guards
 
@@ -409,6 +409,45 @@ Handler detection resolves the registered handlers, so a handler registered by a
 cannot know which resources a handler covers: one handler for operations is enough to pass, and a handler
 written directly against `IAuthorizationHandler` counts. The check turns an unexplained 404 into a
 message; the protection itself is refusal by default.
+
+## Errors as HTTP answers
+
+`Stellaegis.Primitives.AspNetCore` holds the one translation of errors to HTTP, so that every module
+answers the same way.
+
+| `ErrorType` | Status |
+| --- | --- |
+| `Validation` | 400 |
+| `Unauthorized` | 401 |
+| `Forbidden` | 403 |
+| `NotFound` | 404 |
+| `Conflict` | 409 |
+| `PreconditionFailed` | 412 |
+| `Failure` | 500 |
+
+An endpoint returns its `Result` as an HTTP answer: 200 with the value, 204 without one, or problem
+details ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)) on failure.
+
+```csharp
+group.MapGet("/{id}", async (Guid id, DocumentService documents) =>
+    (await documents.GetAsync(id)).ToHttpResult());
+```
+
+The problem details carry the error message as `detail` and the error code as a `code` extension; `type`
+and `title` are ASP.NET Core's defaults for the status. The message of a `Failure` is hidden outside the
+Development environment, since it usually describes a technical cause. The code is always kept, so that
+a client can tell errors apart without parsing a message.
+
+`AddErrorTranslation()` adds a filter to a group of routes, for the exceptions meant for the caller:
+
+| Exception | Answer |
+| --- | --- |
+| `UserFacingException` | the status of its `ErrorType`, with its message |
+| `ArgumentException`, from a guard for instance | 400, its message hidden outside Development: it names an internal parameter |
+| any other | not handled: it goes on to the application's exception handler, usually a 500 |
+
+`errorType.ToStatusCode()` and `error.ToProblemDetails()` are public too, for code that writes its answer
+itself. `ToProblemDetails` copies the message as it is: hiding it is then the caller's decision.
 
 ## License
 

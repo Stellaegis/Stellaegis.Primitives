@@ -23,9 +23,11 @@ internal static class TestApp
     private const string ClaimHeaderPrefix = "X-Claim-";
     private const string SchemeName = "headers";
 
-    public static async Task<WebApplication> StartAsync(Action<IServiceCollection> services, Action<WebApplication> map)
+    /// <summary>Starts the application in <paramref name="environment"/>, Production unless stated, whatever the machine sets.</summary>
+    public static async Task<WebApplication> StartAsync(
+        Action<IServiceCollection> services, Action<WebApplication> map, string environment = "Production")
     {
-        var builder = WebApplication.CreateSlimBuilder();
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = environment });
         builder.WebHost.UseTestServer();
         builder.Logging.ClearProviders();
         builder.Services.AddAuthentication(SchemeName).AddScheme<AuthenticationSchemeOptions, HeaderAuthenticationHandler>(SchemeName, null);
