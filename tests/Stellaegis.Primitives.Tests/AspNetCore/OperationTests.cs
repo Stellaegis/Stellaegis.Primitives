@@ -18,8 +18,7 @@ internal static class NotesModule
 
     public static RouteGroupBuilder MapNotesEndpoints(this IEndpointRouteBuilder routes)
     {
-        routes.RequireRequestContext("Notes");
-        var group = routes.MapGroup("/notes");
+        var group = routes.MapGroup("/notes").RequireRequestContext("Notes");
 
         // A note's owner is the part of its id before the dash: "jane-1" belongs to jane.
         group.MapGet("/{id}", async (string id, IRequestContext context, HttpContext http) =>

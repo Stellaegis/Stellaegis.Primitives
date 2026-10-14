@@ -8,13 +8,13 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
-/// Fails the startup when a route labelled with an <see cref="Operation"/> would refuse every resource — no
-/// authorization handler for operations, and no <c>AllowAnyResource</c> — or requires a policy that does not
-/// exist.
+/// Fails the startup when a route is in the shared space without a declaration accepting it; when a route
+/// labelled with an <see cref="Operation"/> would refuse every resource — no authorization handler for operations,
+/// and no <c>AllowAnyResource</c>; or when it requires a policy that does not exist.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A startup filter, because both conditions are only known once the application has mapped its routes and
+/// A startup filter, because these conditions are only known once the application has mapped its routes and
 /// chained the module's conventions, and because ASP.NET Core builds endpoints — and runs final conventions —
 /// at the first request. The filter runs right after the pipeline is built, forces the endpoints to build,
 /// and a failure stops the application before it serves anything.
@@ -25,17 +25,40 @@ namespace Stellaegis.Primitives.AspNetCore;
 /// <see cref="IAuthorizationHandler"/> may handle anything, and counts.
 /// </para>
 /// </remarks>
-internal sealed class OperationStartupCheck : IStartupFilter
+internal sealed class EndpointStartupCheck : IStartupFilter
 {
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
     {
         next(app);
-        Check(app.ApplicationServices);
+        var endpoints = app.ApplicationServices.GetService<EndpointDataSource>()?.Endpoints ?? [];
+        CheckSharedSpace(endpoints);
+        CheckOperations(app.ApplicationServices, endpoints);
     };
 
-    private static void Check(IServiceProvider services)
+    private static void CheckSharedSpace(IEnumerable<Endpoint> all)
     {
-        var endpoints = (services.GetService<EndpointDataSource>()?.Endpoints ?? [])
+        var refused = all
+            .Where(endpoint => endpoint.Metadata.GetMetadata<SharedSpaceMetadata>() is not null
+                && endpoint.Metadata.GetMetadata<RequestContextDeclaration>() is not { AcceptsSharedSpace: true })
+            .ToList();
+        if (refused.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"These routes are in the shared space, and nothing declares they accept it: {DescribeSharedSpace(refused)}. "
+                + "Remove InSharedSpace() from them, or, for routes of your own, declare it on their group with "
+                + "RequireRequestContext(\"<name>\", acceptsSharedSpace: true).");
+        }
+    }
+
+    private static string DescribeSharedSpace(IEnumerable<Endpoint> endpoints)
+        => string.Join(", ", endpoints.Select(endpoint =>
+            endpoint.Metadata.GetMetadata<RequestContextDeclaration>() is { } declaration
+                ? $"{endpoint.DisplayName} ({declaration.Module} does not accept the shared space)"
+                : $"{endpoint.DisplayName} (no module declared)"));
+
+    private static void CheckOperations(IServiceProvider services, IEnumerable<Endpoint> all)
+    {
+        var endpoints = all
             .Where(endpoint => endpoint.GetOperation() is not null)
             .ToList();
         if (endpoints.Count == 0)

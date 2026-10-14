@@ -1,36 +1,45 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Stellaegis.Primitives.AspNetCore;
 
-/// <summary>Startup checks a module runs when it maps its endpoints.</summary>
+/// <summary>What a module declares about the request context when it maps its endpoints.</summary>
 public static class RequestContextEndpointRouteBuilderExtensions
 {
     /// <summary>
-    /// Fails the startup when no <see cref="IRequestContext"/> is registered, naming the line to add. A module
-    /// calls it first in its mapping method:
+    /// Declares that the endpoints of <paramref name="group"/> belong to <paramref name="module"/>, and whether
+    /// they accept the shared space. Fails the startup when no <see cref="IRequestContext"/> is registered, naming
+    /// the line to add. A module calls it on the group it maps onto:
     /// <code>
     /// public static RouteGroupBuilder MapDocumentsEndpoints(this IEndpointRouteBuilder routes)
     /// {
-    ///     routes.RequireRequestContext("Documents");
+    ///     var group = routes.MapGroup("/documents")
+    ///         .RequireRequestContext("Documents", acceptsSharedSpace: true);
     ///     // ...
     /// }
     /// </code>
     /// </summary>
-    /// <param name="routes">The routes the module maps onto.</param>
-    /// <param name="module">The module name, as the error message shows it.</param>
-    /// <returns><paramref name="routes"/>, unchanged.</returns>
+    /// <param name="group">The group holding the module's endpoints.</param>
+    /// <param name="module">The module name, as the error messages show it.</param>
+    /// <param name="acceptsSharedSpace">
+    /// Whether the endpoints may be mapped in the shared space. Refused by default: a route the application
+    /// marks with <see cref="SharedSpaceEndpointExtensions.InSharedSpace{TBuilder}"/> fails the startup unless the
+    /// declaration closest to it accepts the shared space. A sub-group declares again to differ from its parent.
+    /// </param>
+    /// <returns><paramref name="group"/>.</returns>
     /// <remarks>
-    /// The check relies on <see cref="IServiceProviderIsService"/>, which the default container implements.
-    /// With a container that does not, it is skipped, and a missing registration surfaces at the first
-    /// request instead.
+    /// The registration check relies on <see cref="IServiceProviderIsService"/>, which the default container
+    /// implements. With a container that does not, it is skipped, and a missing registration surfaces at the
+    /// first request instead.
     /// </remarks>
     /// <exception cref="InvalidOperationException">No request context is registered.</exception>
-    public static IEndpointRouteBuilder RequireRequestContext(this IEndpointRouteBuilder routes, string module)
+    public static RouteGroupBuilder RequireRequestContext(this RouteGroupBuilder group, string module, bool acceptsSharedSpace = false)
     {
-        Guard.NotNull(routes);
+        Guard.NotNull(group);
         Guard.NotWhiteSpace(module);
 
+        IEndpointRouteBuilder routes = group;
         if (routes.ServiceProvider.GetService<IServiceProviderIsService>() is { } services
             && !services.IsService(typeof(IRequestContext)))
         {
@@ -39,6 +48,12 @@ public static class RequestContextEndpointRouteBuilderExtensions
                 + "Register one before mapping them: builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment(\"main\")), "
                 + "with the compartment source that fits the application, or AddStellaegisRequestContext<TSource>() with a source of its own.");
         }
-        return routes;
+        return group.WithMetadata(new RequestContextDeclaration(module, acceptsSharedSpace));
     }
 }
+
+/// <summary>
+/// The metadata <see cref="RequestContextEndpointRouteBuilderExtensions.RequireRequestContext"/> places on a route.
+/// The last one on a route — the declaration closest to it — is the one that counts.
+/// </summary>
+internal sealed record RequestContextDeclaration(string Module, bool AcceptsSharedSpace);
