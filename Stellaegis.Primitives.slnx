@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Stellaegis.Primitives.AspNetCore/Stellaegis.Primitives.AspNetCore.csproj" />
     <Project Path="src/Stellaegis.Primitives.Data/Stellaegis.Primitives.Data.csproj" />
     <Project Path="src/Stellaegis.Primitives/Stellaegis.Primitives.csproj" />
   </Folder>

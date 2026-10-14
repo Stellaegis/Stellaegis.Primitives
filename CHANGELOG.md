@@ -16,6 +16,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Both implement `IParsable<T>` and serialize as a JSON string, including as a dictionary key.
 - `PrimitiveTypeHandlers.Register()`: Dapper type handlers reading and writing `Compartment` and `Actor` as
   strings (`Stellaegis.Primitives.Data`).
+- `Stellaegis.Primitives.AspNetCore`, a new package for modules that expose HTTP endpoints.
+- `IRequestContext`: the compartment and the actor of a request, registered per request with
+  `AddStellaegisRequestContext`, configurable from a constant, a route value, a claim or a function, or
+  provided by an adapter of the application.
+- `RequireRequestContext`: fails the startup of a module mapped without a request context.
 
 ## [1.0.0] — 2026-10-12
 

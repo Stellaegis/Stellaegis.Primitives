@@ -12,12 +12,14 @@
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Stellaegis.Primitives\Stellaegis.Primitives.csproj" />
     <ProjectReference Include="..\..\src\Stellaegis.Primitives.Data\Stellaegis.Primitives.Data.csproj" />
+    <ProjectReference Include="..\..\src\Stellaegis.Primitives.AspNetCore\Stellaegis.Primitives.AspNetCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

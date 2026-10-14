@@ -5,23 +5,26 @@ operation results, argument guards, events, and a unit of work over ADO.NET. Eac
 a library published on its own. These primitives are the part they have in common, so that a module
 does not carry its own copy of them.
 
-You can use them without any other Stellaegis package. They know nothing of tenants, of HTTP or of a
-message bus: those are decisions of the application that hosts them.
+You can use them without any other Stellaegis package. They know nothing of tenants or of a message
+bus: those are decisions of the application that hosts them. HTTP is confined to a package of its own,
+which only the modules exposing endpoints reference.
 
 The library targets .NET 10 and is released under the MIT license.
 
 ## Packages
 
-The library is split in two, so that code which never touches a database takes no data-access
-dependency.
+The library is split in three, so that code which never touches a database takes no data-access
+dependency, and code that exposes no endpoint takes no dependency on ASP.NET Core.
 
 | Package | Contents | Depends on |
 | --- | --- | --- |
 | `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment` and `Actor`, the event marker and the publication port | .NET only |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
+| `Stellaegis.Primitives.AspNetCore` | The request context port, giving the compartment and the actor of a request | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
-writes a relational database.
+writes a relational database. Depending on `Stellaegis.Primitives.AspNetCore` says that it maps HTTP
+endpoints.
 
 ## Results and errors
 
@@ -290,6 +293,58 @@ a list as its values:
 ```csharp
 new { compartments = compartments.Select(c => c.Value) }   // where compartment in @compartments
 ```
+
+## The request context of an HTTP module
+
+A module that exposes endpoints needs two things from each request: the compartment it addresses, and
+the actor performing it. Where they come from is the application's decision — a route segment, a
+claim, a subdomain, a constant. The module reads them through a port, `IRequestContext`, and the
+application registers the adapter that fills it.
+
+```csharp
+builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment("main"));
+```
+
+The configurable adapter takes one compartment source — `SingleCompartment`, `CompartmentFromRoute`,
+`CompartmentFromClaim` or `CompartmentFrom` with a function of the `HttpContext` — and an optional actor
+source, `ActorFromClaim` or `ActorFrom`. Declaring no compartment source, or two, fails at registration.
+An application with a resolution of its own, such as a tenant middleware, registers its adapter instead:
+`AddStellaegisRequestContext<TAdapter>()`. Both are registered per request.
+
+```csharp
+builder.Services.AddStellaegisRequestContext(c => c
+    .CompartmentFromRoute("org")      // /api/orgs/{org}/...
+    .ActorFromClaim("oid"));          // the Microsoft Entra object id
+```
+
+The compartment is `null` when it cannot be resolved — a missing or invalid route value, for instance —
+and a module's endpoint then answers 404. There is no fallback compartment: an adapter that wants one
+names it explicitly.
+
+The actor is always present. By default it is read from the `NameIdentifier` claim, then `sub`, and it
+is `anonymous` when no user is authenticated; `AnonymousActor` changes that label. A module never
+refuses a request for lack of an actor: whether a request needs an authenticated user is decided by the
+security the application attaches to the routes. An authenticated user without the claim, or with a
+value that is not a valid `Actor`, fails the request: the claim chosen is the wrong one, and recording
+the request as anonymous would attribute it to nobody.
+
+Inside a module, an endpoint receives the port by injection, and the mapping method checks at startup
+that an adapter is registered:
+
+```csharp
+public static RouteGroupBuilder MapDocumentsEndpoints(this IEndpointRouteBuilder routes)
+{
+    routes.RequireRequestContext("Documents");   // fails the startup, naming the line to add
+    var group = routes.MapGroup("/documents");
+    group.MapGet("/{id}", (Guid id, IRequestContext context, DocumentService documents) =>
+        context.Compartment is { } compartment ? documents.Get(compartment, id) : Results.NotFound());
+    return group;
+}
+```
+
+The port serves the endpoints and filters only. The module's core takes the compartment and the actor as
+parameters: a singleton receiving the port would keep the context of the first request, and work done
+outside a request — a scheduled task, an import — has none.
 
 ## License
 
