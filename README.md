@@ -20,7 +20,7 @@ dependency, and code that exposes no endpoint takes no dependency on ASP.NET Cor
 | --- | --- | --- |
 | `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment`, `Space` and `Actor`, the event marker and the publication port | .NET only |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
-| `Stellaegis.Primitives.AspNetCore` | The request context port, giving the compartment and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
+| `Stellaegis.Primitives.AspNetCore` | The request context port, giving the space and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
 writes a relational database. Depending on `Stellaegis.Primitives.AspNetCore` says that it maps HTTP
@@ -309,20 +309,18 @@ new { compartments = compartments.Select(c => c.Value) }   // where compartment 
 
 ## The request context of an HTTP module
 
-A module that exposes endpoints needs two things from each request: the compartment it addresses, and
-the actor performing it. Where they come from is the application's decision — a route segment, a
-claim, a subdomain, a constant. The module reads them through a port, `IRequestContext`, and the
-application registers the adapter that fills it.
+A module that exposes endpoints needs two things from each request: the space it acts in — a compartment,
+or the shared space — and the actor performing it. Where the compartment and the actor come from is the
+application's decision: a route segment, a claim, a subdomain, a constant. The module reads them through a
+port, `IRequestContext`. The application registers the source it is read from.
 
 ```csharp
 builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment("main"));
 ```
 
-The configurable adapter takes one compartment source — `SingleCompartment`, `CompartmentFromRoute`,
+The configurable source takes one compartment source — `SingleCompartment`, `CompartmentFromRoute`,
 `CompartmentFromClaim` or `CompartmentFrom` with a function of the `HttpContext` — and an optional actor
 source, `ActorFromClaim` or `ActorFrom`. Declaring no compartment source, or two, fails at registration.
-An application with a resolution of its own, such as a tenant middleware, registers its adapter instead:
-`AddStellaegisRequestContext<TAdapter>()`. Both are registered per request.
 
 ```csharp
 builder.Services.AddStellaegisRequestContext(c => c
@@ -330,9 +328,22 @@ builder.Services.AddStellaegisRequestContext(c => c
     .ActorFromClaim("oid"));          // the Microsoft Entra object id
 ```
 
-The compartment is `null` when it cannot be resolved — a missing or invalid route value, for instance —
-and a module's endpoint then answers 404. There is no fallback compartment: an adapter that wants one
-names it explicitly.
+An application with a resolution of its own, such as a tenant middleware, implements
+`IRequestContextSource` and registers it instead. Both are registered per request.
+
+```csharp
+sealed class TenantSource(ITenantAccessor tenants, IUserAccessor users) : IRequestContextSource
+{
+    public Compartment? Compartment => tenants.Current?.Compartment;
+    public Actor Actor => users.Current;
+}
+
+builder.Services.AddStellaegisRequestContext<TenantSource>();
+```
+
+The space is `null` when the compartment cannot be resolved — a missing or invalid route value, for
+instance — and a module's endpoint then answers 404. There is no fallback compartment: a source that
+wants one names it explicitly.
 
 The actor is always present. By default it is read from the `NameIdentifier` claim, then `sub`, and it
 is `anonymous` when no user is authenticated; `AnonymousActor` changes that label. A module never
@@ -341,23 +352,46 @@ security the application attaches to the routes. An authenticated user without t
 value that is not a valid `Actor`, fails the request: the claim chosen is the wrong one, and recording
 the request as anonymous would attribute it to nobody.
 
-Inside a module, an endpoint receives the port by injection, and the mapping method checks at startup
-that an adapter is registered:
+### The shared space
+
+A module that holds data belonging to no compartment serves it in the shared space. The application
+chooses the routes that reach it, by marking a group:
+
+```csharp
+app.MapGroup("/api/orgs/{org}").MapDocumentsEndpoints();
+app.MapGroup("/api/shared").MapDocumentsEndpoints().InSharedSpace();
+```
+
+On a marked route the space is `Space.Shared`, and the source's compartment is not read. A source knows
+nothing of the shared space and cannot produce it: the mark is the only way in. A group mapped without the
+mark reads the compartment as usual, and answers 404 where there is none.
+
+### Inside a module
+
+An endpoint receives the port by injection. The mapping method declares its group with
+`RequireRequestContext`, which fails the startup when no request context is registered, naming the line
+to add, and states whether the module accepts the shared space:
 
 ```csharp
 public static RouteGroupBuilder MapDocumentsEndpoints(this IEndpointRouteBuilder routes)
 {
-    routes.RequireRequestContext("Documents");   // fails the startup, naming the line to add
-    var group = routes.MapGroup("/documents");
+    var group = routes.MapGroup("/documents")
+        .RequireRequestContext("Documents", acceptsSharedSpace: true);
     group.MapGet("/{id}", (Guid id, IRequestContext context, DocumentService documents) =>
-        context.Compartment is { } compartment ? documents.Get(compartment, id) : Results.NotFound());
+        context.Space is { } space ? documents.Get(space, id) : Results.NotFound());
     return group;
 }
 ```
 
-The port serves the endpoints and filters only. The module's core takes the compartment and the actor as
-parameters: a singleton receiving the port would keep the context of the first request, and work done
-outside a request — a scheduled task, an import — has none.
+Not every module has a shared space, and refusal is the default: a module without one writes
+`.RequireRequestContext("Notifications")`, and an application marking it `InSharedSpace()` fails to start.
+The declaration closest to a route counts, so a sub-group declares again to differ — administration
+routes kept out of the shared space, for instance. A marked route that belongs to no module fails the
+startup too; an application serving routes of its own in the shared space declares them the same way.
+
+The port serves the endpoints and filters only. The module's core takes the space and the actor as
+parameters — a `Space`, never `null`: a singleton receiving the port would keep the context of the first
+request, and work done outside a request — a scheduled task, an import — has none.
 
 ## Securing a module's routes and data
 
@@ -413,10 +447,10 @@ app.MapGroup("/api").MapDocumentsEndpoints().AllowAnyResource();
 
 ### Checked at startup
 
-Registering a request context also registers a startup check of every route labelled with an operation.
-The application fails to start when such a route has neither an authorization handler for operations nor
-`AllowAnyResource()`, or when a policy it requires is not registered. The message names the routes and
-the way out.
+Registering a request context also registers a startup check of the routes. The application fails to
+start when a route marked `InSharedSpace()` has no declaration accepting the shared space; when a route
+labelled with an operation has neither an authorization handler for operations nor `AllowAnyResource()`;
+or when a policy it requires is not registered. The message names the routes and the way out.
 
 Handler detection resolves the registered handlers, so a handler registered by a factory is seen. It
 cannot know which resources a handler covers: one handler for operations is enough to pass, and a handler

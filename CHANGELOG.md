@@ -5,6 +5,36 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] — 2026-10-14
+
+The shared space: data that belongs to no compartment, reached only by the routes an application marks for
+it. The three packages move together to 2.0.0; only `Stellaegis.Primitives.AspNetCore` breaks its API.
+
+### Added
+
+- `Space`: where a module acts — a `Compartment`, or `Space.Shared`. Its `Compartment` is `null` exactly when
+  it is the shared space, with `IsShared` beside it. A compartment converts to its space, and a `null`
+  compartment to a `null` space, never to the shared space. No text form and no serialization: a module that
+  has a shared space decides how it stores it (`Stellaegis.Primitives`).
+- `IRequestContextSource`: what an application implements to give the compartment and the actor of a request.
+  It knows nothing of the shared space.
+- `InSharedSpace()`: marks a group of routes as addressing the shared space. On a marked route the space is
+  `Space.Shared`, and the source's compartment is not read.
+- The startup check fails when a route marked `InSharedSpace()` has no declaration accepting the shared space,
+  naming the route and the module.
+
+### Changed
+
+- **Breaking:** `IRequestContext` gives `Space? Space` instead of `Compartment? Compartment`. `null` still
+  means an unresolved compartment.
+- **Breaking:** `AddStellaegisRequestContext<TSource>()` takes an `IRequestContextSource` instead of an
+  `IRequestContext`. Only the interface an application's adapter implements changes; its members do not.
+- **Breaking:** `RequireRequestContext(module, acceptsSharedSpace = false)` applies to the module's
+  `RouteGroupBuilder` instead of an `IEndpointRouteBuilder`, and places the module's declaration on each of
+  its endpoints. The shared space is refused by default; the declaration closest to a route counts.
+- The documentation of `Compartment` no longer places data that belongs to no compartment in a compartment set
+  apart for it.
+
 ## [1.1.0] — 2026-10-14
 
 A third package, `Stellaegis.Primitives.AspNetCore`, for modules that expose HTTP endpoints.
@@ -56,5 +86,6 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
+[2.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/releases/tag/v1.0.0
