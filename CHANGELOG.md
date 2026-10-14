@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `Compartment`: the compartment a piece of data belongs to, an identifier of 3 to 63 lowercase letters,
+  digits and single hyphens (`Stellaegis.Primitives`).
+- `Actor`: who performs an operation, as recorded for traceability — 1 to 128 characters, no control
+  character, no leading or trailing whitespace.
+- Both implement `IParsable<T>` and serialize as a JSON string, including as a dictionary key.
+
 ## [1.0.0] — 2026-10-12
 
 First release.
@@ -26,4 +36,5 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
+[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/releases/tag/v1.0.0

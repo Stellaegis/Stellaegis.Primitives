@@ -17,7 +17,7 @@ dependency.
 
 | Package | Contents | Depends on |
 | --- | --- | --- |
-| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, the event marker and the publication port | .NET only |
+| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment` and `Actor`, the event marker and the publication port | .NET only |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, and a snake_case column map for Dapper | `Stellaegis.Primitives`, Dapper |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
@@ -81,6 +81,39 @@ background worker or a command-line tool.
 
 The cost of this choice is precision: a category cannot express every HTTP status, such as 422 or
 429. A host that needs one of those statuses derives its own exception type and maps it explicitly.
+
+## Compartments and actors
+
+A module partitions its data by **compartment**: a tenant, an organization, a user, or the single
+compartment of a project that needs only one. A module records who performs an operation as an
+**actor**. Both are strings on the wire and in a database. In code they are distinct types, so that a
+compartment cannot be passed where an actor or a document type is expected.
+
+```csharp
+var main = Compartment.Parse("main");          // a value the code knows to be valid
+if (!Compartment.TryParse(routeValue, out var compartment))
+    return Results.NotFound();                  // a value read from a request
+
+var actor = Actor.Parse("job:purge");
+```
+
+A compartment is an identifier of 3 to 63 characters: a lowercase letter first, then lowercase letters,
+digits and single hyphens, ending with a letter or a digit. The type knows no special value: you name
+every compartment, including the one holding data that belongs to no business compartment. To
+compartment by a technical identifier, prefix it — `u` followed by a GUID in the `N` format, for
+instance.
+
+Uppercase is rejected rather than converted. Two equal compartments therefore always carry the same
+string, and an ordinal comparison is enough in a database, a cache key or a file path. The cost falls
+on the code that reads the input: converting a user-typed value to lowercase is its job.
+
+An actor comes from a token whose format is not under your control, so it follows no grammar: 1 to 128
+characters, no control character, no leading or trailing whitespace. It does not tell users, machines
+and scheduled tasks apart. If your records need to, prefix the value, as `job:purge` does.
+
+Both types implement `IParsable<T>`: `Parse` throws a `FormatException` on an invalid value, `TryParse`
+returns `false`. Both serialize to JSON as a plain string, also as a dictionary key, with reflection or
+with source generation.
 
 ## Events
 
