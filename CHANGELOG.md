@@ -14,6 +14,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Actor`: who performs an operation, as recorded for traceability — 1 to 128 characters, no control
   character, no leading or trailing whitespace.
 - Both implement `IParsable<T>` and serialize as a JSON string, including as a dictionary key.
+- `PrimitiveTypeHandlers.Register()`: Dapper type handlers reading and writing `Compartment` and `Actor` as
+  strings (`Stellaegis.Primitives.Data`).
 
 ## [1.0.0] — 2026-10-12
 

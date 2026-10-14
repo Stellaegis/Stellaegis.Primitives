@@ -18,7 +18,7 @@ dependency.
 | Package | Contents | Depends on |
 | --- | --- | --- |
 | `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment` and `Actor`, the event marker and the publication port | .NET only |
-| `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, and a snake_case column map for Dapper | `Stellaegis.Primitives`, Dapper |
+| `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
 writes a relational database.
@@ -264,6 +264,32 @@ private sealed record InvoiceRow(
 Dapper also offers a global setting, `DefaultTypeMap.MatchNamesWithUnderscores`. It applies to every type
 in the process, including types that belong to other libraries, so a library should not set it. The
 type map applies only to the types registered with it.
+
+## Compartments and actors in Dapper
+
+`PrimitiveTypeHandlers.Register()` lets Dapper read a `Compartment` or an `Actor` from a string column
+and send one as a parameter, in properties as in positional records. Register it once, next to the type
+maps:
+
+```csharp
+static DocumentStore()
+{
+    PrimitiveTypeHandlers.Register();
+    SnakeCaseTypeMap<DocumentRow>.Register();
+}
+```
+
+A parameter is sent exactly as Dapper sends a string, so replacing a `string` by one of these types
+leaves the SQL unchanged. A `NULL` column reads as `null`. A stored value that breaks the type's rule
+fails the read with a `DataException` naming the column: it means corrupted data, or a column without
+the constraint that should have refused it.
+
+Dapper expands a list parameter without type handlers, and the provider then rejects the elements. Pass
+a list as its values:
+
+```csharp
+new { compartments = compartments.Select(c => c.Value) }   // where compartment in @compartments
+```
 
 ## License
 
