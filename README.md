@@ -20,7 +20,7 @@ dependency, and code that exposes no endpoint takes no dependency on ASP.NET Cor
 | --- | --- | --- |
 | `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment` and `Actor`, the event marker and the publication port | .NET only |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
-| `Stellaegis.Primitives.AspNetCore` | The request context port, giving the compartment and the actor of a request | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
+| `Stellaegis.Primitives.AspNetCore` | The request context port, giving the compartment and the actor of a request, and the operations that let an application secure a module's routes and data | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
 writes a relational database. Depending on `Stellaegis.Primitives.AspNetCore` says that it maps HTTP
@@ -345,6 +345,70 @@ public static RouteGroupBuilder MapDocumentsEndpoints(this IEndpointRouteBuilder
 The port serves the endpoints and filters only. The module's core takes the compartment and the actor as
 parameters: a singleton receiving the port would keep the context of the first request, and work done
 outside a request — a scheduled task, an import — has none.
+
+## Securing a module's routes and data
+
+A module does not decide who may call it. It labels each route with an `Operation` — module, name, and a
+kind, `Read`, `Write` or `Delete`, declared rather than deduced from the HTTP verb — and the application
+attaches its own security to the group the module returns.
+
+```csharp
+public static readonly Operation Read = new("documents", "read", OperationKind.Read);
+
+group.MapGet("/{id}", ...).WithMetadata(Read);
+```
+
+| What | Who decides | How |
+| --- | --- | --- |
+| Who may call a route | the application | `.RequireAuthorization(...)`, or a policy per operation |
+| Who may access a resource the route loads | the application | an authorization handler on the resource, or `.AllowAnyResource()` |
+| Which operation a route performs | the module | `Operation` metadata |
+
+### A policy per operation
+
+```csharp
+app.MapGroup("/api").MapDocumentsEndpoints()
+   .RequireAuthorizationPerOperation(op => op.Kind == OperationKind.Read ? "reader" : "writer");
+```
+
+`RequireAuthorizationPerOperation` is a final convention: an ordinary group convention runs before a route
+has its own metadata, and could not see the operation. A route without an operation is left to the
+application's fallback policy, if it sets one. A module's administration routes, such as a purge, are
+mapped by a method of their own, so that a policy attached per kind cannot open them by accident.
+
+ASP.NET Core runs final conventions when it builds its endpoints, at the first request. Do not add an
+endpoint filter from one: ASP.NET Core ignores it without an error.
+
+### Access to a resource
+
+Once a route has loaded a resource, the module asks ASP.NET Core's resource-based authorization, with the
+route's operation as the requirement:
+
+```csharp
+if (document is null || !await http.AuthorizeResourceAsync(document))
+    return Results.NotFound();
+```
+
+The application answers with an ordinary handler — `AuthorizationHandler<Operation, Document>` — and a
+refusal is answered as an absence. Refusal is the default: without a handler, nothing is accessible. An
+application that lets any user reaching the routes access any resource declares it, as it would declare
+`[AllowAnonymous]`:
+
+```csharp
+app.MapGroup("/api").MapDocumentsEndpoints().AllowAnyResource();
+```
+
+### Checked at startup
+
+Registering a request context also registers a startup check of every route labelled with an operation.
+The application fails to start when such a route has neither an authorization handler for operations nor
+`AllowAnyResource()`, or when a policy it requires is not registered. The message names the routes and
+the way out.
+
+Handler detection resolves the registered handlers, so a handler registered by a factory is seen. It
+cannot know which resources a handler covers: one handler for operations is enough to pass, and a handler
+written directly against `IAuthorizationHandler` counts. The check turns an unexplained 404 into a
+message; the protection itself is refusal by default.
 
 ## License
 

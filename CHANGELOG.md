@@ -21,6 +21,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `AddStellaegisRequestContext`, configurable from a constant, a route value, a claim or a function, or
   provided by an adapter of the application.
 - `RequireRequestContext`: fails the startup of a module mapped without a request context.
+- `Operation` and `OperationKind`: the operation a route performs, as route metadata and as the requirement
+  checked on a resource; `GetOperation` reads it from an endpoint or a request.
+- `RequireAuthorizationPerOperation`: attaches the application's policy to each route by its operation.
+- `AuthorizeResourceAsync`: asks ASP.NET Core's resource-based authorization about a loaded resource, refusal
+  by default; `AllowAnyResource` declares that any resource is accessible.
+- A startup check, registered with the request context: a route labelled with an operation needs an
+  authorization handler or `AllowAnyResource`, and every policy it requires must exist.
 
 ## [1.0.0] — 2026-10-12
 

@@ -4,8 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Stellaegis.Primitives.AspNetCore</RootNamespace>
     <PackageId>Stellaegis.Primitives.AspNetCore</PackageId>
-    <Description>Stellaegis primitives for modules that expose HTTP endpoints: the request context port, carrying the compartment and the actor of a request. No dependency beyond ASP.NET Core.</Description>
-    <PackageTags>stellaegis;aspnetcore;minimal-api;compartment</PackageTags>
+    <Description>Stellaegis primitives for modules that expose HTTP endpoints: the request context port, carrying the compartment and the actor of a request, and the operations an application secures routes and data by. No dependency beyond ASP.NET Core.</Description>
+    <PackageTags>stellaegis;aspnetcore;minimal-api;compartment;authorization</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

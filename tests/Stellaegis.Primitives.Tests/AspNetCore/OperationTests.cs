@@ -1,0 +1,271 @@
+using System.Net;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Stellaegis.Primitives.AspNetCore;
+
+namespace Stellaegis.Primitives.Tests.AspNetCore;
+
+/// <summary>A module as a consumer sees it: routes labelled with operations, a resource checked on load.</summary>
+internal static class NotesModule
+{
+    public static readonly Operation Read = new("notes", "read", OperationKind.Read);
+    public static readonly Operation Write = new("notes", "write", OperationKind.Write);
+
+    public static RouteGroupBuilder MapNotesEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.RequireRequestContext("Notes");
+        var group = routes.MapGroup("/notes");
+
+        // A note's owner is the part of its id before the dash: "jane-1" belongs to jane.
+        group.MapGet("/{id}", async (string id, IRequestContext context, HttpContext http) =>
+        {
+            if (context.Compartment is not { } compartment)
+                return Results.NotFound();
+            var note = new Note(id, compartment, Actor.Parse(id.Split('-')[0]));
+            return await http.AuthorizeResourceAsync(note) ? Results.Text(note.Id) : Results.NotFound();
+        }).WithMetadata(Read);
+        group.MapPost("/", () => Results.Text("created")).WithMetadata(Write);
+        return group;
+    }
+}
+
+internal sealed record Note(string Id, Compartment Compartment, Actor Owner);
+
+/// <summary>A consumer's rule: a note is accessible to its owner only.</summary>
+internal sealed class OwnerRule : AuthorizationHandler<Operation, Note>
+{
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, Operation requirement, Note resource)
+    {
+        if (context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value == resource.Owner.Value)
+            context.Succeed(requirement);
+        return Task.CompletedTask;
+    }
+}
+
+public class OperationTests
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private static Task<WebApplication> StartNotesAsync(
+        Action<IServiceCollection> services, Func<RouteGroupBuilder, RouteGroupBuilder> secure, string prefix = "")
+        => TestApp.StartAsync(
+            s =>
+            {
+                s.AddStellaegisRequestContext(c => c.SingleCompartment("main"));
+                services(s);
+            },
+            app => secure(app.MapGroup(prefix).MapNotesEndpoints()));
+
+    private static void AddRolePolicies(IServiceCollection services) => services.AddAuthorization(options =>
+    {
+        options.AddPolicy("reader", policy => policy.RequireClaim("role", "reader", "writer"));
+        options.AddPolicy("writer", policy => policy.RequireClaim("role", "writer"));
+    });
+
+    private static async Task<HttpStatusCode> StatusAsync(WebApplication app, HttpRequestMessage request)
+        => (await app.GetTestClient().SendAsync(request, Ct)).StatusCode;
+
+    [Fact]
+    public void Operations_compare_by_value()
+    {
+        Assert.Equal(NotesModule.Read, new Operation("notes", "read", OperationKind.Read));
+        Assert.True(NotesModule.Read == new Operation("notes", "read", OperationKind.Read));
+        Assert.True(NotesModule.Read != new Operation("notes", "read", OperationKind.Write));
+        Assert.Equal("notes.read", NotesModule.Read.ToString());
+    }
+
+    [Fact]
+    public void An_operation_needs_a_module_a_name_and_a_known_kind()
+    {
+        Assert.Throws<ArgumentException>(() => new Operation(" ", "read", OperationKind.Read));
+        Assert.Throws<ArgumentException>(() => new Operation("notes", "", OperationKind.Read));
+        Assert.Throws<ArgumentException>(() => new Operation("notes", "read", (OperationKind)42));
+    }
+
+    [Fact]
+    public async Task The_operation_is_read_from_the_endpoint_and_the_request()
+    {
+        await using var app = await TestApp.StartAsync(_ => { }, routes =>
+            routes.MapGet("/op", (HttpContext http) => $"{http.GetOperation()}|{http.GetEndpoint()!.GetOperation()}")
+                .WithMetadata(NotesModule.Read));
+
+        Assert.Equal("notes.read|notes.read", await app.GetTestClient().GetStringAsync("/op", Ct));
+    }
+
+    [Fact]
+    public async Task Policies_are_attached_per_operation()
+    {
+        await using var app = await StartNotesAsync(AddRolePolicies, group => group
+            .RequireAuthorizationPerOperation(op => op.Kind == OperationKind.Read ? "reader" : "writer")
+            .AllowAnyResource());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await StatusAsync(app, TestApp.Request("/notes/jane-1")));
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/notes/jane-1", ("role", "reader"))));
+        Assert.Equal(HttpStatusCode.Forbidden, await StatusAsync(app, TestApp.Request(HttpMethod.Post, "/notes", ("role", "reader"))));
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request(HttpMethod.Post, "/notes", ("role", "writer"))));
+    }
+
+    [Fact]
+    public async Task A_route_without_operation_falls_to_the_fallback_policy()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services
+                .AddStellaegisRequestContext(c => c.SingleCompartment("main"))
+                .AddAuthorization(options =>
+                {
+                    options.AddPolicy("member", policy => policy.RequireAuthenticatedUser());
+                    options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+                }),
+            routes =>
+            {
+                routes.MapNotesEndpoints().RequireAuthorizationPerOperation(_ => "member").AllowAnyResource();
+                routes.MapGet("/forgotten", () => "open");
+            });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await StatusAsync(app, TestApp.Request("/forgotten")));
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/forgotten", ("sub", "jane"))));
+    }
+
+    [Fact]
+    public async Task The_same_permission_on_another_compartment_is_forbidden()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services
+                .AddStellaegisRequestContext(c => c.CompartmentFromRoute("org"))
+                .AddSingleton<IAuthorizationHandler, MemberOfCompartmentRule>()
+                .AddAuthorization(options => options.AddPolicy("member", policy => policy.AddRequirements(new MemberOfCompartment()))),
+            routes => routes.MapGroup("/orgs/{org}").MapNotesEndpoints()
+                .RequireAuthorizationPerOperation(_ => "member")
+                .AllowAnyResource());
+
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/orgs/acme/notes/jane-1", ("org", "acme"))));
+        Assert.Equal(HttpStatusCode.Forbidden, await StatusAsync(app, TestApp.Request("/orgs/other/notes/jane-1", ("org", "acme"))));
+    }
+
+    [Fact]
+    public async Task A_resource_handler_decides_access_to_each_resource()
+    {
+        await using var app = await StartNotesAsync(
+            services => services.AddAuthorization().AddSingleton<IAuthorizationHandler, OwnerRule>(),
+            group => group);
+
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/notes/jane-1", (TestApp.NameIdentifier, "jane"))));
+        Assert.Equal(HttpStatusCode.NotFound, await StatusAsync(app, TestApp.Request("/notes/john-1", (TestApp.NameIdentifier, "jane"))));
+        Assert.Equal(HttpStatusCode.NotFound, await StatusAsync(app, TestApp.Request("/notes/jane-1")));
+    }
+
+    [Fact]
+    public async Task Allowing_any_resource_skips_the_question()
+    {
+        await using var app = await StartNotesAsync(_ => { }, group => group.AllowAnyResource());
+
+        Assert.Equal("john-1", await app.GetTestClient().GetStringAsync("/notes/john-1", Ct));
+    }
+
+    [Fact]
+    public async Task Neither_a_handler_nor_an_open_declaration_fails_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            StartNotesAsync(services => services.AddAuthorization(), group => group));
+
+        Assert.Contains("notes.read", exception.Message);
+        Assert.Contains("AuthorizationHandler<Operation, TResource>", exception.Message);
+        Assert.Contains(".AllowAnyResource()", exception.Message);
+    }
+
+    [Fact]
+    public async Task A_handler_registered_by_a_factory_is_detected()
+    {
+        await using var app = await StartNotesAsync(
+            services => services.AddAuthorization().AddScoped<IAuthorizationHandler>(_ => new OwnerRule()),
+            group => group);
+
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/notes/jane-1", (TestApp.NameIdentifier, "jane"))));
+    }
+
+    [Fact]
+    public async Task A_handler_written_against_the_interface_counts()
+    {
+        await using var app = await StartNotesAsync(
+            services => services.AddAuthorization().AddSingleton<IAuthorizationHandler, AnythingRule>(),
+            group => group);
+
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/notes/john-1")));
+    }
+
+    [Fact]
+    public async Task A_handler_for_another_requirement_does_not_count()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => StartNotesAsync(
+            services => services.AddAuthorization().AddSingleton<IAuthorizationHandler, MemberOfCompartmentRule>(),
+            group => group));
+    }
+
+    [Fact]
+    public async Task An_unknown_policy_fails_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => StartNotesAsync(
+            AddRolePolicies,
+            group => group.RequireAuthorizationPerOperation(op => op.Kind == OperationKind.Read ? "reader" : "writr").AllowAnyResource()));
+
+        Assert.Contains("writr", exception.Message);
+        Assert.DoesNotContain("reader", exception.Message);
+    }
+
+    [Fact]
+    public async Task Asking_on_a_route_without_operation_fails()
+    {
+        await using var app = await TestApp.StartAsync(_ => { }, routes =>
+            routes.MapGet("/unlabelled", async (HttpContext http) => await http.AuthorizeResourceAsync("anything")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => app.GetTestClient().GetStringAsync("/unlabelled", Ct));
+    }
+
+    // ASP.NET Core behaviour this package documents rather than code: a filter added by a final convention is
+    // silently ignored. If this test fails, the trap is gone and the warning can go with it.
+    [Fact]
+    public async Task A_filter_added_by_a_final_convention_is_ignored()
+    {
+        await using var app = await TestApp.StartAsync(_ => { }, routes =>
+        {
+            var group = routes.MapGroup("/filtered");
+            group.MapGet("/", () => "passed");
+            ((IEndpointConventionBuilder)group).Finally(endpoint =>
+                endpoint.FilterFactories.Add((_, next) => _ => ValueTask.FromResult<object?>(Results.StatusCode(403))));
+        });
+
+        Assert.Equal("passed", await app.GetTestClient().GetStringAsync("/filtered", Ct));
+    }
+
+    private sealed class MemberOfCompartment : IAuthorizationRequirement;
+
+    /// <summary>Membership read from an <c>org</c> claim, against the compartment of the request.</summary>
+    private sealed class MemberOfCompartmentRule : AuthorizationHandler<MemberOfCompartment>
+    {
+        protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, MemberOfCompartment requirement)
+        {
+            if (context.Resource is HttpContext http
+                && http.RequestServices.GetRequiredService<IRequestContext>().Compartment?.Value == context.User.FindFirst("org")?.Value)
+            {
+                context.Succeed(requirement);
+            }
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Succeeds on every requirement it is given — written against the interface, so its scope is unknown.</summary>
+    private sealed class AnythingRule : IAuthorizationHandler
+    {
+        public Task HandleAsync(AuthorizationHandlerContext context)
+        {
+            foreach (var requirement in context.PendingRequirements.ToList())
+                context.Succeed(requirement);
+            return Task.CompletedTask;
+        }
+    }
+}
