@@ -18,7 +18,7 @@ dependency, and code that exposes no endpoint takes no dependency on ASP.NET Cor
 
 | Package | Contents | Depends on |
 | --- | --- | --- |
-| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment` and `Actor`, the event marker and the publication port | .NET only |
+| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment`, `Space` and `Actor`, the event marker and the publication port | .NET only |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
 | `Stellaegis.Primitives.AspNetCore` | The request context port, giving the compartment and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
@@ -102,9 +102,22 @@ var actor = Actor.Parse("job:purge");
 
 A compartment is an identifier of 3 to 63 characters: a lowercase letter first, then lowercase letters,
 digits and single hyphens, ending with a letter or a digit. The type knows no special value: you name
-every compartment, including the one holding data that belongs to no business compartment. To
-compartment by a technical identifier, prefix it — `u` followed by a GUID in the `N` format, for
-instance.
+every compartment. To compartment by a technical identifier, prefix it — `u` followed by a GUID in the
+`N` format, for instance.
+
+Data that belongs to no compartment is not stored in a compartment set apart for it, since any name the
+rule accepts could also be a real compartment. A module that holds such data has a **shared space**. A
+`Space` is where a module acts: a compartment, or `Space.Shared`.
+
+```csharp
+Space space = compartment;                      // the space of a compartment
+if (space.IsShared) { ... }                     // otherwise space.Compartment is not null
+```
+
+The shared space is not a compartment, so its `Compartment` is `null`. A `null` compartment converts to
+a `null` space, never to the shared space: a compartment that could not be resolved never grants access
+to shared data. A module that has a shared space decides how it stores it; `Space` has no text form and
+no serialization.
 
 Uppercase is rejected rather than converted. Two equal compartments therefore always carry the same
 string, and an ordinal comparison is enough in a database, a cache key or a file path. The cost falls

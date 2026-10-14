@@ -12,6 +12,11 @@ namespace Stellaegis.Primitives;
 /// </summary>
 /// <remarks>
 /// <para>
+/// Data that belongs to no compartment lives in the shared space of a module that has one,
+/// <see cref="Space.Shared"/>, and never in a compartment set apart for it: a name the rule accepts is a
+/// name a real compartment could carry.
+/// </para>
+/// <para>
 /// The value is an identifier of 3 to 63 characters: a lowercase letter first, then lowercase letters,
 /// digits and single hyphens, ending with a letter or a digit. Uppercase is rejected, never converted —
 /// converting belongs to the edge that reads the input — so two equal compartments always carry the
