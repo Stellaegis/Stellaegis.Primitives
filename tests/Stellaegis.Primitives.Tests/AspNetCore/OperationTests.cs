@@ -24,9 +24,9 @@ internal static class NotesModule
         // A note's owner is the part of its id before the dash: "jane-1" belongs to jane.
         group.MapGet("/{id}", async (string id, IRequestContext context, HttpContext http) =>
         {
-            if (context.Compartment is not { } compartment)
+            if (context.Space is not { } space)
                 return Results.NotFound();
-            var note = new Note(id, compartment, Actor.Parse(id.Split('-')[0]));
+            var note = new Note(id, space, Actor.Parse(id.Split('-')[0]));
             return await http.AuthorizeResourceAsync(note) ? Results.Text(note.Id) : Results.NotFound();
         }).WithMetadata(Read);
         group.MapPost("/", () => Results.Text("created")).WithMetadata(Write);
@@ -34,7 +34,7 @@ internal static class NotesModule
     }
 }
 
-internal sealed record Note(string Id, Compartment Compartment, Actor Owner);
+internal sealed record Note(string Id, Space Space, Actor Owner);
 
 /// <summary>A consumer's rule: a note is accessible to its owner only.</summary>
 internal sealed class OwnerRule : AuthorizationHandler<Operation, Note>
@@ -250,7 +250,7 @@ public class OperationTests
         protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, MemberOfCompartment requirement)
         {
             if (context.Resource is HttpContext http
-                && http.RequestServices.GetRequiredService<IRequestContext>().Compartment?.Value == context.User.FindFirst("org")?.Value)
+                && http.RequestServices.GetRequiredService<IRequestContext>().Space?.Compartment?.Value == context.User.FindFirst("org")?.Value)
             {
                 context.Succeed(requirement);
             }

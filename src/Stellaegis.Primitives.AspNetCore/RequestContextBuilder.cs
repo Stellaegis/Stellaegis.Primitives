@@ -93,7 +93,7 @@ public sealed class RequestContextBuilder
         return this;
     }
 
-    internal RequestContextSources Build() => new(
+    internal RequestContextSettings Build() => new(
         _compartment ?? throw new InvalidOperationException(
             "A request context needs a compartment source: call SingleCompartment, CompartmentFromRoute, "
             + "CompartmentFromClaim or CompartmentFrom."),
@@ -123,8 +123,8 @@ public sealed class RequestContextBuilder
     }
 }
 
-/// <summary>The sources a <see cref="RequestContextBuilder"/> declared.</summary>
-internal sealed record RequestContextSources(
+/// <summary>What a <see cref="RequestContextBuilder"/> declared: the compartment and actor sources, and the anonymous label.</summary>
+internal sealed record RequestContextSettings(
     Func<HttpContext, Compartment?> Compartment,
     Func<HttpContext, Actor?> Actor,
     Actor Anonymous);

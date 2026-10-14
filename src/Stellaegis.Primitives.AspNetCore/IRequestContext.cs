@@ -1,26 +1,34 @@
 namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
-/// The compartment and the actor of the current HTTP request. A module's endpoints receive it by injection;
-/// the consumer provides the adapter that reads them, with
+/// The space and the actor of the current HTTP request. A module's endpoints receive it by injection; the
+/// application provides the <see cref="IRequestContextSource"/> it is read from, with
 /// <c>AddStellaegisRequestContext</c> (<see cref="RequestContextServiceCollectionExtensions"/>).
 /// </summary>
 /// <remarks>
-/// The port serves a module's endpoints and filters only. Its core takes the compartment and the actor as
-/// explicit parameters: a singleton receiving this port would keep the context of the first request, and
-/// work done outside a request has no context at all.
+/// <para>
+/// This package provides the only implementation. On a route the application marks with
+/// <see cref="SharedSpaceEndpointExtensions.InSharedSpace{TBuilder}"/>, the space is <see cref="Space.Shared"/>;
+/// elsewhere it is the compartment of the source, or <see langword="null"/>.
+/// </para>
+/// <para>
+/// The port serves a module's endpoints and filters only. Its core takes the space and the actor as explicit
+/// parameters: a singleton receiving this port would keep the context of the first request, and work done
+/// outside a request has no context at all.
+/// </para>
 /// </remarks>
 public interface IRequestContext
 {
     /// <summary>
-    /// The compartment the request addresses, or <see langword="null"/> when it cannot be resolved — an
-    /// endpoint then answers 404. There is no fallback compartment: an adapter that wants one names it.
+    /// Where the request acts: a compartment, or the shared space on a route marked for it. It is
+    /// <see langword="null"/> when the compartment cannot be resolved — an endpoint then answers 404. An
+    /// unresolved compartment never becomes the shared space.
     /// </summary>
-    Compartment? Compartment { get; }
+    Space? Space { get; }
 
     /// <summary>
     /// Who performs the request, always present. A module never refuses a request for lack of an actor:
-    /// authentication belongs to the consumer, and an anonymous request carries an anonymous label.
+    /// authentication belongs to the application, and an anonymous request carries an anonymous label.
     /// </summary>
     Actor Actor { get; }
 }

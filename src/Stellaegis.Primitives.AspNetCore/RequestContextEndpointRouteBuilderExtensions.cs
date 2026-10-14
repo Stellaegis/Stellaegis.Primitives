@@ -37,7 +37,7 @@ public static class RequestContextEndpointRouteBuilderExtensions
             throw new InvalidOperationException(
                 $"{module} endpoints need a request context, giving the compartment and the actor of each request. "
                 + "Register one before mapping them: builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment(\"main\")), "
-                + "with the compartment source that fits the application, or AddStellaegisRequestContext<TAdapter>().");
+                + "with the compartment source that fits the application, or AddStellaegisRequestContext<TSource>() with a source of its own.");
         }
         return routes;
     }

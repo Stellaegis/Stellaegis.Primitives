@@ -11,9 +11,9 @@ public class RequestContextTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    // Answers "compartment|actor", "-" standing for an unresolved compartment.
+    // Answers "space|actor", "-" standing for an unresolved compartment.
     private static void MapEcho(IEndpointRouteBuilder routes, string pattern = "/echo")
-        => routes.MapGet(pattern, (IRequestContext context) => $"{context.Compartment?.Value ?? "-"}|{context.Actor.Value}");
+        => routes.MapGet(pattern, (IRequestContext context) => $"{context.Space?.ToString() ?? "-"}|{context.Actor.Value}");
 
     private static async Task<string> EchoAsync(Action<RequestContextBuilder> configure, HttpRequestMessage request, string pattern = "/echo")
     {
@@ -110,7 +110,7 @@ public class RequestContextTests
     {
         var services = new ServiceCollection().AddStellaegisRequestContext(c => c.SingleCompartment("main"));
 
-        Assert.Throws<InvalidOperationException>(() => services.AddStellaegisRequestContext<FixedRequestContext>());
+        Assert.Throws<InvalidOperationException>(() => services.AddStellaegisRequestContext<FixedSource>());
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class RequestContextTests
             .AddStellaegisRequestContext(c => c.SingleCompartment("main"));
 
         Assert.Equal(ServiceLifetime.Scoped, services.Single(d => d.ServiceType == typeof(IRequestContext)).Lifetime);
-        Assert.Equal(ServiceLifetime.Scoped, new ServiceCollection().AddStellaegisRequestContext<FixedRequestContext>()
+        Assert.Equal(ServiceLifetime.Scoped, new ServiceCollection().AddStellaegisRequestContext<FixedSource>()
             .Single(d => d.ServiceType == typeof(IRequestContext)).Lifetime);
     }
 
@@ -128,7 +128,7 @@ public class RequestContextTests
     public async Task An_adapter_of_the_application_serves_the_endpoints()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext<FixedRequestContext>(),
+            services => services.AddStellaegisRequestContext<FixedSource>(),
             routes => MapEcho(routes));
 
         Assert.Equal("platform|system", await app.GetTestClient().GetStringAsync("/echo", Ct));
@@ -164,7 +164,7 @@ public class RequestContextTests
         await using var scope = app.Services.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<IRequestContext>();
 
-        Assert.Throws<InvalidOperationException>(() => context.Compartment);
+        Assert.Throws<InvalidOperationException>(() => context.Space);
     }
 
     [Fact]
@@ -174,9 +174,9 @@ public class RequestContextTests
             services => services.AddStellaegisRequestContext(c => c.CompartmentFromRoute("org")),
             routes => routes.MapGet("/orgs/{org}", async (IRequestContext context) =>
             {
-                var compartment = context.Compartment;
+                var space = context.Space;
                 await Task.Yield();
-                return $"{compartment?.Value}|{context.Actor.Value}";
+                return $"{space}|{context.Actor.Value}";
             }));
         var client = app.GetTestClient();
 
@@ -201,7 +201,65 @@ public class RequestContextTests
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, (await client.GetAsync("/orgs/Acme", Ct)).StatusCode);
     }
 
-    private sealed class FixedRequestContext : IRequestContext
+    [Fact]
+    public async Task A_marked_route_addresses_the_shared_space()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddStellaegisRequestContext(c => c.CompartmentFromRoute("org")),
+            routes =>
+            {
+                MapEcho(routes, "/orgs/{org}");
+                MapEcho(routes.MapGroup("/shared").InSharedSpace());
+            });
+        var client = app.GetTestClient();
+
+        Assert.Equal("acme|anonymous", await client.GetStringAsync("/orgs/acme", Ct));
+        Assert.Equal("(shared)|anonymous", await client.GetStringAsync("/shared/echo", Ct));
+    }
+
+    [Fact]
+    public async Task A_route_without_the_mark_never_addresses_the_shared_space()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddStellaegisRequestContext(c => c.CompartmentFromRoute("org")),
+            routes => MapEcho(routes.MapGroup("/shared")));
+
+        Assert.Equal("-|anonymous", await app.GetTestClient().GetStringAsync("/shared/echo", Ct));
+    }
+
+    [Fact]
+    public async Task An_application_source_gives_way_to_the_mark()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddStellaegisRequestContext<FixedSource>(),
+            routes =>
+            {
+                MapEcho(routes);
+                MapEcho(routes.MapGroup("/shared").InSharedSpace());
+            });
+        var client = app.GetTestClient();
+
+        Assert.Equal("platform|system", await client.GetStringAsync("/echo", Ct));
+        Assert.Equal("(shared)|system", await client.GetStringAsync("/shared/echo", Ct));
+    }
+
+    [Fact]
+    public async Task A_marked_route_does_not_read_the_compartment_of_the_source()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddStellaegisRequestContext<NoCompartmentSource>(),
+            routes => MapEcho(routes.MapGroup("/shared").InSharedSpace()));
+
+        Assert.Equal("(shared)|system", await app.GetTestClient().GetStringAsync("/shared/echo", Ct));
+    }
+
+    private sealed class NoCompartmentSource : IRequestContextSource
+    {
+        public Compartment? Compartment => throw new InvalidOperationException("The compartment is read on a shared route.");
+        public Actor Actor { get; } = Actor.Parse("system");
+    }
+
+    private sealed class FixedSource : IRequestContextSource
     {
         public Compartment? Compartment { get; } = Compartment.Parse("platform");
         public Actor Actor { get; } = Actor.Parse("system");
