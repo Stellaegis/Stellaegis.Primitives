@@ -569,6 +569,10 @@ row-level security:
 app.MapGroup("/api").MapDocumentsEndpoints().RequireAuthorization().AllowAnyResource();
 ```
 
+⚠ The startup check reads the routes, not the database. When `AllowAnyResource()` relies on row-level
+security, the rule must be installed in the database: without it, every user reaching the routes accesses
+every resource, and nothing fails.
+
 ### Checked at startup
 
 `AddStellaegisStartupCheck()`, which registering a request context calls too, registers a startup check
