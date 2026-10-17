@@ -214,3 +214,53 @@ public sealed class SessionContextTests
         Assert.Equal(("globex", "paul"), await uow.Repo<ISessionProbe>().ReadAsync(Ct));
     }
 }
+
+public sealed class InMemorySpaceUnitOfWorkContractTests : UnitOfWorkContractTests
+{
+    private readonly InMemoryWidgetRepository _store = new();
+
+    protected override IUnitOfWorkFactory<WidgetsDatabase> Factory => new InFixedSpace<WidgetsDatabase>(
+        new InMemorySpaceUnitOfWorkFactory<WidgetsDatabase>(
+            (_, _) => new InMemoryRepositoryRegistry<WidgetsDatabase>().Add<IWidgetRepository>(() => _store), Publisher),
+        Compartment.Parse("acme"),
+        Actor.Parse("jane"));
+}
+
+public sealed class InMemorySpaceUnitOfWorkTests
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task Each_space_has_the_store_its_registry_gives()
+    {
+        var stores = new Dictionary<Space, InMemoryWidgetRepository>();
+        var seen = new List<(Space, Actor)>();
+        var factory = new InMemorySpaceUnitOfWorkFactory<WidgetsDatabase>((space, actor) =>
+        {
+            seen.Add((space, actor));
+            var store = stores.TryGetValue(space, out var existing) ? existing : stores[space] = new InMemoryWidgetRepository();
+            return new InMemoryRepositoryRegistry<WidgetsDatabase>().Add<IWidgetRepository>(() => store);
+        });
+
+        await using (var uow = await factory.OpenAndBeginAsync(Compartment.Parse("acme"), Actor.Parse("jane"), Ct))
+        {
+            await uow.Repo<IWidgetRepository>().InsertAsync("a", Ct);
+            await uow.CommitAsync(Ct);
+        }
+
+        await using var other = await factory.OpenAsync(Compartment.Parse("globex"), Actor.Parse("paul"), Ct);
+        Assert.Equal(0, await other.Repo<IWidgetRepository>().CountAsync(Ct));
+        Assert.Equal(
+            [(Space.Of(Compartment.Parse("acme")), Actor.Parse("jane")), (Space.Of(Compartment.Parse("globex")), Actor.Parse("paul"))],
+            seen);
+    }
+
+    [Fact]
+    public async Task A_space_and_an_actor_are_required()
+    {
+        var factory = new InMemorySpaceUnitOfWorkFactory<WidgetsDatabase>((_, _) => new InMemoryRepositoryRegistry<WidgetsDatabase>());
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => factory.OpenAsync(null!, Actor.Parse("jane"), Ct));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => factory.OpenAsync(Space.Shared, null!, Ct));
+    }
+}

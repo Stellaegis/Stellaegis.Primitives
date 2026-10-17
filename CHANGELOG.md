@@ -28,6 +28,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `SessionContext.SqlServer`, `SessionContext.PostgreSql` and `SessionContext.None`: how the engine
   receives `stellaegis.space` and `stellaegis.actor`. PostgreSQL refuses a connection setting
   `No Reset On Close=true`, with which Npgsql would hand the context to the next user of the connection.
+- `InMemorySpaceUnitOfWorkFactory<TDatabase>`: the in-memory counterpart, which takes the repositories of
+  each unit of work from a function of the space and the actor (`Stellaegis.Primitives.Data`).
 - `IUnitOfWork` is also `IDisposable`: a plain `using` rolls back an open transaction and closes the
   connection, as `await using` does (`Stellaegis.Primitives.Data`).
 - `SingleCompartment(Compartment)`: takes the constant an application declares once for its single

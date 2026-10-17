@@ -307,6 +307,15 @@ which is why the rows of an in-memory repository are best kept immutable, as rec
 update. Two units of work running at the same time on the same in-memory store are not isolated from
 each other.
 
+`InMemorySpaceUnitOfWorkFactory<TDatabase>` stands in for `AdoSpaceUnitOfWorkFactory<TDatabase>`. It
+takes the registry of each unit of work from a function of the space and the actor — what the session
+context gives a real database: one store per compartment, or repositories built to filter by them.
+
+```csharp
+var factory = new InMemorySpaceUnitOfWorkFactory<InvoicingDatabase>((space, actor) =>
+    new InMemoryRepositoryRegistry<InvoicingDatabase>().Add<IInvoiceRepository>(() => stores[space]));
+```
+
 ## Mapping snake_case columns with Dapper
 
 Database columns are often named in snake_case (`display_name`) while C# properties use PascalCase
