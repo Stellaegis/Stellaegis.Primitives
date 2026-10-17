@@ -21,6 +21,40 @@ internal sealed class AdoUnitOfWork<TDatabase>(
 
     public bool HasActiveTransaction => _transaction is not null;
 
+    /// <summary>
+    /// Opens a unit of work on <paramref name="connection"/>, which it then owns: checks the connection before
+    /// opening it, opens it, prepares the session — its context, for instance — and begins a transaction if
+    /// asked. On any failure the unit is disposed, and the connection with it.
+    /// </summary>
+    internal static async Task<IUnitOfWork> OpenAsync(
+        DbConnection connection,
+        RepositoryRegistry<TDatabase> registry,
+        IEventPublisher publisher,
+        IsolationLevel isolationLevel,
+        bool beginTransaction,
+        Func<DbConnection, CancellationToken, Task>? prepare,
+        Action<DbConnection>? beforeOpen,
+        CancellationToken cancellationToken)
+    {
+        var uow = new AdoUnitOfWork<TDatabase>(connection, registry, publisher, isolationLevel);
+        try
+        {
+            beforeOpen?.Invoke(connection);
+            if (connection.State != ConnectionState.Open)
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            if (prepare is not null)
+                await prepare(connection, cancellationToken).ConfigureAwait(false);
+            if (beginTransaction)
+                await uow.BeginAsync(cancellationToken).ConfigureAwait(false);
+            return uow;
+        }
+        catch
+        {
+            await uow.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     public async Task BeginAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();

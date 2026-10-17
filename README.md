@@ -231,6 +231,46 @@ when the code runs: a missing registration throws `RepositoryNotRegisteredExcept
 call. That is the price of resolving repositories on demand instead of listing them as properties of
 a dedicated unit-of-work class per database.
 
+### Opening a unit of work in a space
+
+A module with compartments opens its units of work in a space, for an actor, through
+`ISpaceUnitOfWorkFactory<TDatabase>`. The space may choose the database, and both are set in the
+connection's **session context**, so that the database itself knows who works where: a row-level
+security policy, an audit trigger or a function of the application reads them.
+
+```csharp
+// one database per compartment
+var factory = new AdoSpaceUnitOfWorkFactory<InvoicingDatabase>(
+    (space, ct) => tenantDatabases.OpenAsync(space.ToSegment(), ct), registry, SessionContext.PostgreSql, publisher);
+
+// or one database for every space
+var factory = new AdoSpaceUnitOfWorkFactory<InvoicingDatabase>(dataSource, registry, SessionContext.SqlServer, publisher);
+
+await using var uow = await factory.OpenAsync(space, actor, ct);
+```
+
+The context is set as the connection opens, for the session: it holds without a transaction and across
+successive ones, exactly as the unit of work is used otherwise. An application with a single compartment
+opens in that compartment.
+
+| | Set as | Read back as |
+| --- | --- | --- |
+| SQL Server, `SessionContext.SqlServer` | `sp_set_session_context`, read-only | `SESSION_CONTEXT(N'stellaegis.space')`, `SESSION_CONTEXT(N'stellaegis.actor')` |
+| PostgreSQL, `SessionContext.PostgreSql` | `set_config(…, false)` | `current_setting('stellaegis.space', true)`, `current_setting('stellaegis.actor', true)` |
+
+The space is `space.ToSegment()` — the compartment, or `_shared` — and the actor its value. A session
+without them sees nothing, so a policy written that way fails closed. `SessionContext.None` sets nothing,
+for an engine without a session context such as SQLite.
+
+Both engines reset a pooled connection before its next user, so a context never outlives its unit of
+work; the tests prove it against real engines. Npgsql can be told not to reset, with
+`No Reset On Close=true`: `SessionContext.PostgreSql` refuses such a connection rather than hand one
+user's identity to the next. Under SQL Server, the read-only context cannot be changed inside the unit
+of work, and Microsoft.Data.SqlClient offers no way to skip the reset.
+
+`IUnitOfWorkFactory<TDatabase>` stays, without a space, for code that has none: a database of its own,
+with no compartment.
+
 ### Publishing from a unit of work
 
 `uow.Publish(event)` holds the event until the transaction ends. After a successful commit, the unit

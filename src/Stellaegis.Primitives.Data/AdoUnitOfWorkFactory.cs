@@ -52,20 +52,9 @@ public sealed class AdoUnitOfWorkFactory<TDatabase>(
         var connection = await _connectionProvider(cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("The connection provider returned null.");
 
-        var uow = new AdoUnitOfWork<TDatabase>(connection, _registry, _publisher, isolationLevel);
-        try
-        {
-            if (connection.State != ConnectionState.Open)
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-            if (beginTransaction)
-                await uow.BeginAsync(cancellationToken).ConfigureAwait(false);
-            return uow;
-        }
-        catch
-        {
-            await uow.DisposeAsync().ConfigureAwait(false);
-            throw;
-        }
+        return await AdoUnitOfWork<TDatabase>.OpenAsync(
+            connection, _registry, _publisher, isolationLevel, beginTransaction,
+            prepare: null, beforeOpen: null, cancellationToken).ConfigureAwait(false);
     }
 
     private static Func<CancellationToken, Task<DbConnection>> OpenFrom(DbDataSource dataSource) =>

@@ -21,6 +21,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Space.ToSegment()` and `Space.SharedSegment`: the one projection of a space into an address segment — a
   vault path, a blob path, a cache key —, the compartment identifier or `_shared`. Not a serialization:
   nothing reads a space back from it (`Stellaegis.Primitives`).
+- `ISpaceUnitOfWorkFactory<TDatabase>` and `AdoSpaceUnitOfWorkFactory<TDatabase>`: open a unit of work in
+  a `Space`, for an `Actor`. The space may choose the connection, through a function of the space or one
+  `DbDataSource` shared by every space, and both are set in the connection's session context for the
+  session, with or without a transaction (`Stellaegis.Primitives.Data`).
+- `SessionContext.SqlServer`, `SessionContext.PostgreSql` and `SessionContext.None`: how the engine
+  receives `stellaegis.space` and `stellaegis.actor`. PostgreSQL refuses a connection setting
+  `No Reset On Close=true`, with which Npgsql would hand the context to the next user of the connection.
 - `IUnitOfWork` is also `IDisposable`: a plain `using` rolls back an open transaction and closes the
   connection, as `await using` does (`Stellaegis.Primitives.Data`).
 - `SingleCompartment(Compartment)`: takes the constant an application declares once for its single
