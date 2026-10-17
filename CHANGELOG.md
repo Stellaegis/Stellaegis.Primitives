@@ -12,6 +12,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The exception of `RequireRequestContext` without a registered request context suggested
   `SingleCompartment("main")`. It now suggests `SingleCompartment("acme")`: a single compartment is named after the
   organization that owns the data, never a placeholder (`Stellaegis.Primitives.AspNetCore`).
+- The documentation of `Actor` says that an actor is a stable, opaque identifier, never an e-mail address or a name;
+  the README's examples pass the actor to a module's core, and warn that the startup check cannot see a missing
+  row-level security rule behind `AllowAnyResource()`.
 
 ## [3.0.0] — 2026-10-17
 

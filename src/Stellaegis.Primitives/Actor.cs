@@ -11,7 +11,9 @@ namespace Stellaegis.Primitives;
 /// </summary>
 /// <remarks>
 /// The value comes from a token whose format is not ours, so no grammar applies: 1 to 128 characters,
-/// no control character, no leading or trailing whitespace. The length counts UTF-16 code units, which
+/// no control character, no leading or trailing whitespace. It is a stable, opaque identifier — the <c>sub</c> of a
+/// token, never an e-mail address or a name: modules copy it into every record they write, and deleting an account
+/// does not remove it from there. The length counts UTF-16 code units, which
 /// is never less than a database's count of characters — an actor accepted here fits a column limited
 /// to 128 characters.
 /// </remarks>

@@ -135,7 +135,9 @@ string, and an ordinal comparison is enough in a database, a cache key or a file
 on the code that reads the input: converting a user-typed value to lowercase is its job.
 
 An actor comes from a token whose format is not under your control, so it follows no grammar: 1 to 128
-characters, no control character, no leading or trailing whitespace. It does not tell users, machines
+characters, no control character, no leading or trailing whitespace. Use a stable, opaque identifier — the
+`sub` of a token, never an e-mail address or a name: modules copy it into every record they write, and
+deleting an account does not remove it from there. It does not tell users, machines
 and scheduled tasks apart. If your records need to, prefix the value, as `job:purge` does.
 
 Both types implement `IParsable<T>`: `Parse` throws a `FormatException` on an invalid value, `TryParse`
@@ -485,7 +487,7 @@ public static RouteGroupBuilder MapDocumentsEndpoints(this IEndpointRouteBuilder
         .BelongsTo<DocumentsModule>()
         .RequireRequestContext(acceptsSharedSpace: true);
     group.MapGet("/{id}", (Guid id, IRequestContext context, DocumentService documents) =>
-        context.Space is { } space ? documents.Get(space, id) : Results.NotFound());
+        context.Space is { } space ? documents.Get(space, id, context.Actor) : Results.NotFound());
     return group;
 }
 ```
@@ -611,8 +613,8 @@ An endpoint returns its `Result` as an HTTP answer: 200 with the value, 204 with
 details ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)) on failure.
 
 ```csharp
-group.MapGet("/{id}", async (Guid id, DocumentService documents) =>
-    (await documents.GetAsync(id)).ToHttpResult());
+group.MapGet("/templates/{name}", async (string name, TemplateService templates) =>
+    (await templates.GetAsync(name)).ToHttpResult());
 ```
 
 The problem details carry the error message as `detail` and the error code as a `code` extension; `type`

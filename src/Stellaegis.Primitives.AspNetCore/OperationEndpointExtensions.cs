@@ -28,8 +28,8 @@ public static class OperationEndpointExtensions
     /// </summary>
     /// <remarks>
     /// A final convention: a group convention runs before a route has its own metadata, so only a final one
-    /// sees the operation. It runs when the endpoints are built; the request context registration checks at
-    /// startup that every policy it names exists.
+    /// sees the operation. It runs when the endpoints are built; the startup check
+    /// (<c>AddStellaegisStartupCheck</c>) verifies that every policy it names exists.
     /// </remarks>
     public static TBuilder RequireAuthorizationPerOperation<TBuilder>(this TBuilder builder, Func<Operation, string> policyFor)
         where TBuilder : IEndpointConventionBuilder
