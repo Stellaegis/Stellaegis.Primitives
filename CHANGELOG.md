@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The exception of `RequireRequestContext` without a registered request context suggested
+  `SingleCompartment("main")`. It now suggests `SingleCompartment("acme")`: a single compartment is named after the
+  organization that owns the data, never a placeholder (`Stellaegis.Primitives.AspNetCore`).
+
 ## [3.0.0] — 2026-10-17
 
 A module now has a typed identity, a route labelled with an operation is closed unless it declares its

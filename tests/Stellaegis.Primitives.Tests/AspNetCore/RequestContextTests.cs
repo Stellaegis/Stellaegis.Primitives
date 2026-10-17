@@ -27,7 +27,7 @@ public class RequestContextTests
 
     [Fact]
     public async Task A_single_compartment_and_an_anonymous_request()
-        => Assert.Equal("main|anonymous", await EchoAsync(c => c.SingleCompartment("main"), TestApp.Request("/echo")));
+        => Assert.Equal("acme|anonymous", await EchoAsync(c => c.SingleCompartment("acme"), TestApp.Request("/echo")));
 
     [Fact]
     public async Task A_single_compartment_from_the_application_constant()
@@ -35,13 +35,13 @@ public class RequestContextTests
 
     [Fact]
     public async Task The_actor_defaults_to_the_name_identifier_claim()
-        => Assert.Equal("main|jane", await EchoAsync(
-            c => c.SingleCompartment("main"),
+        => Assert.Equal("acme|jane", await EchoAsync(
+            c => c.SingleCompartment("acme"),
             TestApp.Request("/echo", (TestApp.NameIdentifier, "jane"), ("sub", "other"))));
 
     [Fact]
     public async Task The_actor_falls_back_to_the_sub_claim()
-        => Assert.Equal("main|jane", await EchoAsync(c => c.SingleCompartment("main"), TestApp.Request("/echo", ("sub", "jane"))));
+        => Assert.Equal("acme|jane", await EchoAsync(c => c.SingleCompartment("acme"), TestApp.Request("/echo", ("sub", "jane"))));
 
     [Fact]
     public async Task The_compartment_comes_from_a_route_value()
@@ -72,31 +72,31 @@ public class RequestContextTests
 
     [Fact]
     public async Task The_actor_comes_from_a_chosen_claim()
-        => Assert.Equal("main|0000-oid", await EchoAsync(
-            c => c.SingleCompartment("main").ActorFromClaim("oid"),
+        => Assert.Equal("acme|0000-oid", await EchoAsync(
+            c => c.SingleCompartment("acme").ActorFromClaim("oid"),
             TestApp.Request("/echo", (TestApp.NameIdentifier, "jane"), ("oid", "0000-oid"))));
 
     [Fact]
     public async Task The_actor_comes_from_a_function_of_the_request()
-        => Assert.Equal("main|svc:billing", await EchoAsync(
-            c => c.SingleCompartment("main").ActorFrom(http =>
+        => Assert.Equal("acme|svc:billing", await EchoAsync(
+            c => c.SingleCompartment("acme").ActorFrom(http =>
                 http.User.FindFirst("client_id")?.Value is { } client ? Actor.Parse("svc:" + client) : null),
             TestApp.Request("/echo", ("client_id", "billing"))));
 
     [Fact]
     public async Task The_anonymous_label_is_configurable()
-        => Assert.Equal("main|guest", await EchoAsync(c => c.SingleCompartment("main").AnonymousActor("guest"), TestApp.Request("/echo")));
+        => Assert.Equal("acme|guest", await EchoAsync(c => c.SingleCompartment("acme").AnonymousActor("guest"), TestApp.Request("/echo")));
 
     [Fact]
     public async Task An_authenticated_user_without_the_actor_claim_fails_the_request()
         => await Assert.ThrowsAsync<InvalidOperationException>(() => EchoAsync(
-            c => c.SingleCompartment("main").ActorFromClaim("oid"),
+            c => c.SingleCompartment("acme").ActorFromClaim("oid"),
             TestApp.Request("/echo", (TestApp.NameIdentifier, "jane"))));
 
     [Fact]
     public async Task An_actor_claim_that_is_not_a_valid_actor_fails_the_request()
         => await Assert.ThrowsAsync<InvalidOperationException>(() => EchoAsync(
-            c => c.SingleCompartment("main"),
+            c => c.SingleCompartment("acme"),
             TestApp.Request("/echo", (TestApp.NameIdentifier, new string('a', Actor.MaxLength + 1)))));
 
     [Fact]
@@ -107,12 +107,12 @@ public class RequestContextTests
     [Fact]
     public void A_single_compartment_source_is_allowed()
         => Assert.Throws<InvalidOperationException>(() =>
-            new ServiceCollection().AddStellaegisRequestContext(c => c.SingleCompartment("main").CompartmentFromRoute("org")));
+            new ServiceCollection().AddStellaegisRequestContext(c => c.SingleCompartment("acme").CompartmentFromRoute("org")));
 
     [Fact]
     public void A_single_request_context_is_registered()
     {
-        var services = new ServiceCollection().AddStellaegisRequestContext(c => c.SingleCompartment("main"));
+        var services = new ServiceCollection().AddStellaegisRequestContext(c => c.SingleCompartment("acme"));
 
         Assert.Throws<InvalidOperationException>(() => services.AddStellaegisRequestContext<FixedSource>());
     }
@@ -121,7 +121,7 @@ public class RequestContextTests
     public void The_request_context_is_scoped()
     {
         var services = new ServiceCollection()
-            .AddStellaegisRequestContext(c => c.SingleCompartment("main"));
+            .AddStellaegisRequestContext(c => c.SingleCompartment("acme"));
 
         Assert.Equal(ServiceLifetime.Scoped, services.Single(d => d.ServiceType == typeof(IRequestContext)).Lifetime);
         Assert.Equal(ServiceLifetime.Scoped, new ServiceCollection().AddStellaegisRequestContext<FixedSource>()
@@ -153,17 +153,17 @@ public class RequestContextTests
     public async Task Mapping_a_module_with_a_request_context_passes()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")),
+            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")),
             routes => MapEcho(routes.MapGroup("/docs").RequireRequestContext()));
 
-        Assert.Equal("main|anonymous", await app.GetTestClient().GetStringAsync("/docs/echo", Ct));
+        Assert.Equal("acme|anonymous", await app.GetTestClient().GetStringAsync("/docs/echo", Ct));
     }
 
     [Fact]
     public async Task Reading_the_context_outside_a_request_fails()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")),
+            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")),
             _ => { });
         await using var scope = app.Services.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<IRequestContext>();

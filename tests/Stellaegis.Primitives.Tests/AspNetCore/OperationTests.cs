@@ -61,7 +61,7 @@ public class OperationTests
         => TestApp.StartAsync(
             s =>
             {
-                s.AddStellaegisRequestContext(c => c.SingleCompartment("main"));
+                s.AddStellaegisRequestContext(c => c.SingleCompartment("acme"));
                 services(s);
             },
             app => secure(app.MapGroup(prefix).MapNotesEndpoints()));
@@ -133,7 +133,7 @@ public class OperationTests
     {
         await using var app = await TestApp.StartAsync(
             services => services
-                .AddStellaegisRequestContext(c => c.SingleCompartment("main"))
+                .AddStellaegisRequestContext(c => c.SingleCompartment("acme"))
                 .AddAuthorization(options =>
                 {
                     options.AddPolicy("member", policy => policy.RequireAuthenticatedUser());
@@ -251,7 +251,7 @@ public class OperationTests
     public async Task Only_the_routes_without_authorization_are_named()
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")).AddAuthorization(),
+            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")).AddAuthorization(),
             routes =>
             {
                 var group = routes.MapGroup("/open").BelongsTo<NotesModule>().RequireRequestContext().AllowAnyResource();
@@ -267,7 +267,7 @@ public class OperationTests
     public async Task Every_form_of_authorization_counts()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")).AddAuthorization(),
+            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")).AddAuthorization(),
             routes =>
             {
                 var group = routes.MapGroup("/forms").BelongsTo<NotesModule>().RequireRequestContext().AllowAnyResource();

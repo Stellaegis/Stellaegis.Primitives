@@ -45,7 +45,7 @@ public class EndpointNameTests
     public async Task Distinct_names_start()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")),
+            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")),
             routes =>
             {
                 routes.MapGet("/one", () => "one").WithName("One");
@@ -87,7 +87,7 @@ public class EndpointNameTests
     public async Task Names_differing_in_case_do_not_collide()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")),
+            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")),
             routes =>
             {
                 routes.MapGet("/one", () => "one").WithName("Same");

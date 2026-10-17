@@ -155,7 +155,7 @@ public class ModuleTests
     {
         var services = new ServiceCollection()
             .AddStellaegisStartupCheck()
-            .AddStellaegisRequestContext(c => c.SingleCompartment("main"))
+            .AddStellaegisRequestContext(c => c.SingleCompartment("acme"))
             .AddStellaegisStartupCheck();
 
         Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IStartupFilter));

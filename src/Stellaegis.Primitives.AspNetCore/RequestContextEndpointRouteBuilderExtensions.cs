@@ -44,7 +44,7 @@ public static class RequestContextEndpointRouteBuilderExtensions
         {
             throw new InvalidOperationException(
                 "These endpoints need a request context, giving the compartment and the actor of each request. "
-                + "Register one before mapping them: builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment(\"main\")), "
+                + "Register one before mapping them: builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment(\"acme\")), "
                 + "with the compartment source that fits the application, or AddStellaegisRequestContext<TSource>() with a source of its own.");
         }
         return group.WithMetadata(new RequestContextDeclaration(acceptsSharedSpace));
