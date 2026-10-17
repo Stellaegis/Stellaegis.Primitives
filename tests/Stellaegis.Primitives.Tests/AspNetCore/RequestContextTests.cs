@@ -139,9 +139,9 @@ public class RequestContextTests
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
             _ => { },
-            routes => routes.MapGroup("/docs").RequireRequestContext("Documents")));
+            routes => routes.MapGroup("/docs").RequireRequestContext()));
 
-        Assert.Contains("Documents endpoints need a request context", exception.Message);
+        Assert.Contains("These endpoints need a request context", exception.Message);
         Assert.Contains("AddStellaegisRequestContext", exception.Message);
     }
 
@@ -150,7 +150,7 @@ public class RequestContextTests
     {
         await using var app = await TestApp.StartAsync(
             services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")),
-            routes => MapEcho(routes.MapGroup("/docs").RequireRequestContext("Documents")));
+            routes => MapEcho(routes.MapGroup("/docs").RequireRequestContext()));
 
         Assert.Equal("main|anonymous", await app.GetTestClient().GetStringAsync("/docs/echo", Ct));
     }
@@ -209,7 +209,7 @@ public class RequestContextTests
             routes =>
             {
                 MapEcho(routes, "/orgs/{org}");
-                MapEcho(routes.MapGroup("/shared").RequireRequestContext("Echo", acceptsSharedSpace: true).InSharedSpace());
+                MapEcho(routes.MapGroup("/shared").RequireRequestContext(acceptsSharedSpace: true).InSharedSpace());
             });
         var client = app.GetTestClient();
 
@@ -235,7 +235,7 @@ public class RequestContextTests
             routes =>
             {
                 MapEcho(routes);
-                MapEcho(routes.MapGroup("/shared").RequireRequestContext("Echo", acceptsSharedSpace: true).InSharedSpace());
+                MapEcho(routes.MapGroup("/shared").RequireRequestContext(acceptsSharedSpace: true).InSharedSpace());
             });
         var client = app.GetTestClient();
 
@@ -248,15 +248,20 @@ public class RequestContextTests
     {
         await using var app = await TestApp.StartAsync(
             services => services.AddStellaegisRequestContext<NoCompartmentSource>(),
-            routes => MapEcho(routes.MapGroup("/shared").RequireRequestContext("Echo", acceptsSharedSpace: true).InSharedSpace()));
+            routes => MapEcho(routes.MapGroup("/shared").RequireRequestContext(acceptsSharedSpace: true).InSharedSpace()));
 
         Assert.Equal("(shared)|system", await app.GetTestClient().GetStringAsync("/shared/echo", Ct));
+    }
+
+    private sealed class DocumentsModule : IStellaegisModule
+    {
+        public static string Name => "documents";
     }
 
     // A module answering "space:id", or 404 when the compartment is unresolved.
     private static RouteGroupBuilder MapDocuments(IEndpointRouteBuilder routes, bool acceptsSharedSpace)
     {
-        var group = routes.MapGroup("/documents").RequireRequestContext("Documents", acceptsSharedSpace);
+        var group = routes.MapGroup("/documents").BelongsTo<DocumentsModule>().RequireRequestContext(acceptsSharedSpace);
         group.MapGet("/{id}", (string id, IRequestContext context) =>
             context.Space is { } space ? Results.Text($"{space}:{id}") : Results.NotFound());
         return group;
@@ -286,7 +291,7 @@ public class RequestContextTests
             MapDocuments(routes.MapGroup("/api/shared"), acceptsSharedSpace: false).InSharedSpace()));
 
         Assert.Contains("/api/shared/documents/{id}", exception.Message);
-        Assert.Contains("Documents does not accept the shared space", exception.Message);
+        Assert.Contains("documents does not accept the shared space", exception.Message);
     }
 
     [Fact]
@@ -295,7 +300,7 @@ public class RequestContextTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => StartWithOrgsAsync(routes =>
         {
             var group = MapDocuments(routes.MapGroup("/api/shared"), acceptsSharedSpace: true);
-            group.MapGroup("/admin").RequireRequestContext("Documents").MapPost("/purge", () => "purged");
+            group.MapGroup("/admin").RequireRequestContext().MapPost("/purge", () => "purged");
             group.InSharedSpace();
         }));
 
@@ -308,8 +313,8 @@ public class RequestContextTests
     {
         await using var app = await StartWithOrgsAsync(routes =>
         {
-            var group = routes.MapGroup("/api/shared").RequireRequestContext("Documents");
-            group.MapGroup("/public").RequireRequestContext("Documents", acceptsSharedSpace: true)
+            var group = routes.MapGroup("/api/shared").RequireRequestContext();
+            group.MapGroup("/public").RequireRequestContext(acceptsSharedSpace: true)
                 .MapGet("/{id}", (string id, IRequestContext context) => $"{context.Space}:{id}");
             group.InSharedSpace();
         });
@@ -323,7 +328,7 @@ public class RequestContextTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => StartWithOrgsAsync(routes =>
             routes.MapGroup("/api/shared").InSharedSpace().MapGet("/status", () => "ok")));
 
-        Assert.Contains("/api/shared/status (no module declared)", exception.Message);
+        Assert.Contains("/api/shared/status (no request context declared)", exception.Message);
     }
 
     [Fact]

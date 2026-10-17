@@ -1,0 +1,163 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Stellaegis.Primitives.AspNetCore;
+
+namespace Stellaegis.Primitives.Tests.AspNetCore;
+
+public class ModuleTests
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private static readonly Operation Render = new("rendering", "html", OperationKind.Read);
+
+    private sealed class RenderingModule : IStellaegisModule
+    {
+        public static string Name => "rendering";
+    }
+
+    private sealed class OtherRenderingModule : IStellaegisModule
+    {
+        public static string Name => "rendering";
+    }
+
+    private sealed class UppercaseModule : IStellaegisModule
+    {
+        public static string Name => "Rendering";
+    }
+
+    private sealed class TrailingHyphenModule : IStellaegisModule
+    {
+        public static string Name => "rendering-";
+    }
+
+    private sealed class DoubleHyphenModule : IStellaegisModule
+    {
+        public static string Name => "html--pdf";
+    }
+
+    private sealed class EmptyModule : IStellaegisModule
+    {
+        public static string Name => string.Empty;
+    }
+
+    // A module without compartments: it reads no request context, so the application registers none.
+    private static RouteGroupBuilder MapRendering(IEndpointRouteBuilder routes)
+    {
+        var group = routes.MapGroup("/rendering").BelongsTo<RenderingModule>();
+        group.MapPost("/html", () => "<p></p>").WithMetadata(Render);
+        return group;
+    }
+
+    [Fact]
+    public async Task A_module_without_compartments_is_checked_at_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddStellaegisStartupCheck().AddAuthorization(),
+            routes => MapRendering(routes).AllowAnyResource()));
+
+        Assert.Contains("rendering.html", exception.Message);
+        Assert.Contains("declare no authorization", exception.Message);
+    }
+
+    [Fact]
+    public async Task A_module_without_compartments_needs_no_request_context()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddStellaegisStartupCheck().AddAuthorization(),
+            routes => MapRendering(routes).AllowAnonymous().AllowAnyResource());
+
+        Assert.Null(app.Services.GetService<IRequestContext>());
+        var response = await app.GetTestClient().PostAsync("/rendering/html", null, Ct);
+        Assert.Equal("<p></p>", await response.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Belonging_to_a_module_without_the_startup_check_fails()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddAuthorization(),
+            routes => MapRendering(routes)));
+
+        Assert.Contains("rendering module", exception.Message);
+        Assert.Contains("AddStellaegisStartupCheck()", exception.Message);
+    }
+
+    [Fact]
+    public async Task A_route_labelled_outside_any_module_fails_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddStellaegisStartupCheck().AddAuthorization(),
+            routes =>
+            {
+                MapRendering(routes).AllowAnonymous().AllowAnyResource();
+                routes.MapPost("/pdf", () => "%PDF").WithMetadata(new Operation("rendering", "pdf", OperationKind.Read))
+                    .AllowAnonymous().AllowAnyResource();
+            }));
+
+        Assert.Contains("belong to no module", exception.Message);
+        Assert.Contains("rendering.pdf", exception.Message);
+        Assert.DoesNotContain("rendering.html", exception.Message);
+    }
+
+    [Fact]
+    public async Task Two_module_types_with_the_same_name_fail_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddStellaegisStartupCheck(),
+            routes =>
+            {
+                routes.MapGroup("/one").BelongsTo<RenderingModule>().MapGet("/", () => "one");
+                routes.MapGroup("/two").BelongsTo<OtherRenderingModule>().MapGet("/", () => "two");
+            }));
+
+        Assert.Contains("'rendering'", exception.Message);
+        Assert.Contains(nameof(RenderingModule), exception.Message);
+        Assert.Contains(nameof(OtherRenderingModule), exception.Message);
+    }
+
+    [Fact]
+    public async Task One_module_mapped_twice_is_not_a_homonym()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddStellaegisStartupCheck(),
+            routes =>
+            {
+                routes.MapGroup("/one").BelongsTo<RenderingModule>().MapGet("/", () => "one");
+                routes.MapGroup("/two").BelongsTo<RenderingModule>().MapGet("/", () => "two");
+            });
+
+        Assert.Equal("two", await app.GetTestClient().GetStringAsync("/two", Ct));
+    }
+
+    [Fact]
+    public async Task A_module_name_follows_the_rule()
+    {
+        await AssertRefusedAsync<UppercaseModule>();
+        await AssertRefusedAsync<TrailingHyphenModule>();
+        await AssertRefusedAsync<DoubleHyphenModule>();
+        await AssertRefusedAsync<EmptyModule>();
+
+        static async Task AssertRefusedAsync<TModule>() where TModule : IStellaegisModule
+        {
+            var exception = await Assert.ThrowsAsync<ArgumentException>(() => TestApp.StartAsync(
+                services => services.AddStellaegisStartupCheck(),
+                routes => routes.MapGroup("/m").BelongsTo<TModule>()));
+            Assert.Contains(typeof(TModule).Name, exception.Message);
+        }
+    }
+
+    [Fact]
+    public void Registering_the_check_twice_registers_it_once()
+    {
+        var services = new ServiceCollection()
+            .AddStellaegisStartupCheck()
+            .AddStellaegisRequestContext(c => c.SingleCompartment("main"))
+            .AddStellaegisStartupCheck();
+
+        Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IStartupFilter));
+    }
+}

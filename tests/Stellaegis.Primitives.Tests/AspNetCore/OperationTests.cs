@@ -10,15 +10,21 @@ using Stellaegis.Primitives.AspNetCore;
 
 namespace Stellaegis.Primitives.Tests.AspNetCore;
 
+/// <summary>The identity of the notes module.</summary>
+internal sealed class NotesModule : IStellaegisModule
+{
+    public static string Name => "notes";
+}
+
 /// <summary>A module as a consumer sees it: routes labelled with operations, a resource checked on load.</summary>
-internal static class NotesModule
+internal static class NotesEndpoints
 {
     public static readonly Operation Read = new("notes", "read", OperationKind.Read);
     public static readonly Operation Write = new("notes", "write", OperationKind.Write);
 
     public static RouteGroupBuilder MapNotesEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/notes").RequireRequestContext("Notes");
+        var group = routes.MapGroup("/notes").BelongsTo<NotesModule>().RequireRequestContext();
 
         // A note's owner is the part of its id before the dash: "jane-1" belongs to jane.
         group.MapGet("/{id}", async (string id, IRequestContext context, HttpContext http) =>
@@ -72,10 +78,10 @@ public class OperationTests
     [Fact]
     public void Operations_compare_by_value()
     {
-        Assert.Equal(NotesModule.Read, new Operation("notes", "read", OperationKind.Read));
-        Assert.True(NotesModule.Read == new Operation("notes", "read", OperationKind.Read));
-        Assert.True(NotesModule.Read != new Operation("notes", "read", OperationKind.Write));
-        Assert.Equal("notes.read", NotesModule.Read.ToString());
+        Assert.Equal(NotesEndpoints.Read, new Operation("notes", "read", OperationKind.Read));
+        Assert.True(NotesEndpoints.Read == new Operation("notes", "read", OperationKind.Read));
+        Assert.True(NotesEndpoints.Read != new Operation("notes", "read", OperationKind.Write));
+        Assert.Equal("notes.read", NotesEndpoints.Read.ToString());
     }
 
     [Fact]
@@ -91,7 +97,7 @@ public class OperationTests
     {
         await using var app = await TestApp.StartAsync(_ => { }, routes =>
             routes.MapGet("/op", (HttpContext http) => $"{http.GetOperation()}|{http.GetEndpoint()!.GetOperation()}")
-                .WithMetadata(NotesModule.Read));
+                .WithMetadata(NotesEndpoints.Read));
 
         Assert.Equal("notes.read|notes.read", await app.GetTestClient().GetStringAsync("/op", Ct));
     }
@@ -235,9 +241,9 @@ public class OperationTests
             services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")).AddAuthorization(),
             routes =>
             {
-                var group = routes.MapGroup("/open").RequireRequestContext("Open").AllowAnyResource();
-                group.MapGet("/secured", () => "secured").WithMetadata(NotesModule.Read).RequireAuthorization();
-                group.MapPost("/forgotten", () => "forgotten").WithMetadata(NotesModule.Write);
+                var group = routes.MapGroup("/open").BelongsTo<NotesModule>().RequireRequestContext().AllowAnyResource();
+                group.MapGet("/secured", () => "secured").WithMetadata(NotesEndpoints.Read).RequireAuthorization();
+                group.MapPost("/forgotten", () => "forgotten").WithMetadata(NotesEndpoints.Write);
             }));
 
         Assert.Contains("notes.write", exception.Message);
@@ -251,13 +257,13 @@ public class OperationTests
             services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")).AddAuthorization(),
             routes =>
             {
-                var group = routes.MapGroup("/forms").RequireRequestContext("Forms").AllowAnyResource();
-                group.MapGet("/attribute", () => "attribute").WithMetadata(NotesModule.Read).RequireAuthorization();
-                group.MapGet("/policy", () => "policy").WithMetadata(NotesModule.Read)
+                var group = routes.MapGroup("/forms").BelongsTo<NotesModule>().RequireRequestContext().AllowAnyResource();
+                group.MapGet("/attribute", () => "attribute").WithMetadata(NotesEndpoints.Read).RequireAuthorization();
+                group.MapGet("/policy", () => "policy").WithMetadata(NotesEndpoints.Read)
                     .RequireAuthorization(new AuthorizationPolicyBuilder().RequireClaim("role").Build());
-                group.MapGet("/builder", () => "builder").WithMetadata(NotesModule.Read)
+                group.MapGet("/builder", () => "builder").WithMetadata(NotesEndpoints.Read)
                     .RequireAuthorization(policy => policy.RequireClaim("role"));
-                group.MapGet("/anonymous", () => "anonymous").WithMetadata(NotesModule.Read).AllowAnonymous();
+                group.MapGet("/anonymous", () => "anonymous").WithMetadata(NotesEndpoints.Read).AllowAnonymous();
             });
 
         Assert.Equal(HttpStatusCode.Unauthorized, await StatusAsync(app, TestApp.Request("/forms/attribute")));

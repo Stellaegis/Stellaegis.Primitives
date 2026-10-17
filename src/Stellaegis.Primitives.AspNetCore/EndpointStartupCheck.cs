@@ -8,9 +8,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
-/// Fails the startup when two routes share a name; when a route is in the shared space without a declaration
-/// accepting it; when a route
-/// labelled with an <see cref="Operation"/> declares no authorization — neither a requirement nor
+/// Fails the startup when two routes share a name; when two module types carry the same name; when a route is
+/// in the shared space without a declaration accepting it; when a route labelled with an <see cref="Operation"/>
+/// belongs to no module; when it declares no authorization — neither a requirement nor
 /// <c>AllowAnonymous</c>; when it would refuse every resource — no authorization handler for operations, and no
 /// <c>AllowAnyResource</c>; or when it requires a policy that does not exist.
 /// </summary>
@@ -34,6 +34,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         next(app);
         var endpoints = app.ApplicationServices.GetService<EndpointDataSource>()?.Endpoints ?? [];
         CheckEndpointNames(endpoints);
+        CheckModules(endpoints);
         CheckSharedSpace(endpoints);
         CheckOperations(app.ApplicationServices, endpoints);
     };
@@ -59,6 +60,36 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         }
     }
 
+    private static void CheckModules(IEnumerable<Endpoint> all)
+    {
+        var homonyms = all
+            .Select(endpoint => endpoint.Metadata.GetMetadata<ModuleMetadata>())
+            .OfType<ModuleMetadata>()
+            .Distinct()
+            .GroupBy(module => module.Name, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .ToList();
+        if (homonyms.Count > 0)
+        {
+            var described = homonyms.Select(group =>
+                $"'{group.Key}' for {string.Join(" and ", group.Select(module => module.Type.FullName))}");
+            throw new InvalidOperationException(
+                $"These module names are carried by more than one type: {string.Join("; ", described)}. "
+                + "A module name identifies one module: rename one of them.");
+        }
+
+        var orphans = all
+            .Where(endpoint => endpoint.GetOperation() is not null && endpoint.Metadata.GetMetadata<ModuleMetadata>() is null)
+            .ToList();
+        if (orphans.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"These routes are labelled with an Operation and belong to no module: {Describe(orphans)}. "
+                + "Declare the module on their group with BelongsTo<TModule>(), TModule being the IStellaegisModule "
+                + "that names it; an application's own routes declare a module of the application's.");
+        }
+    }
+
     private static void CheckSharedSpace(IEnumerable<Endpoint> all)
     {
         var refused = all
@@ -70,15 +101,15 @@ internal sealed class EndpointStartupCheck : IStartupFilter
             throw new InvalidOperationException(
                 $"These routes are in the shared space, and nothing declares they accept it: {DescribeSharedSpace(refused)}. "
                 + "Remove InSharedSpace() from them, or, for routes of your own, declare it on their group with "
-                + "RequireRequestContext(\"<name>\", acceptsSharedSpace: true).");
+                + "RequireRequestContext(acceptsSharedSpace: true).");
         }
     }
 
     private static string DescribeSharedSpace(IEnumerable<Endpoint> endpoints)
         => string.Join(", ", endpoints.Select(endpoint =>
-            endpoint.Metadata.GetMetadata<RequestContextDeclaration>() is { } declaration
-                ? $"{endpoint.DisplayName} ({declaration.Module} does not accept the shared space)"
-                : $"{endpoint.DisplayName} (no module declared)"));
+            endpoint.Metadata.GetMetadata<RequestContextDeclaration>() is null
+                ? $"{endpoint.DisplayName} (no request context declared)"
+                : $"{endpoint.DisplayName} ({endpoint.Metadata.GetMetadata<ModuleMetadata>()?.Name ?? "its module"} does not accept the shared space)"));
 
     private static void CheckOperations(IServiceProvider services, IEnumerable<Endpoint> all)
     {

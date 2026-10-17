@@ -16,7 +16,7 @@ public class EndpointNameTests
     {
         RouteGroupBuilder Map(RouteGroupBuilder group)
         {
-            group.RequireRequestContext("Named", acceptsSharedSpace: true);
+            group.RequireRequestContext(acceptsSharedSpace: true);
             group.MapGet("/", () => "list").WithName("ListItems");
             group.MapPost("/", () => "created").WithName("CreateItem");
             group.MapGet("/{id}", (string id) => id);

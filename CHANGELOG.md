@@ -7,7 +7,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `IStellaegisModule`: the identity of a module, a type carrying its name as a static member, so that code
+  needing a module takes the type, never a string (`Stellaegis.Primitives`).
+- `BelongsTo<TModule>()`: declares that a group's routes belong to a module, with or without compartments.
+  It fails when the startup check is not registered.
+- `AddStellaegisStartupCheck()`: registers the startup check without a request context, for applications
+  using only modules without compartments, which were not checked at all. `AddStellaegisRequestContext`
+  calls it.
+- The startup check fails when a route labelled with an `Operation` belongs to no module, and when two
+  module types carry the same name.
+
 ### Changed
+
+- **Breaking:** `RequireRequestContext(acceptsSharedSpace = false)` no longer takes the module name: the
+  module is declared by `BelongsTo<TModule>()`, which a module without compartments calls alone.
 
 - **Breaking:** the startup check fails when a route labelled with an `Operation` declares no authorization —
   neither a requirement (`RequireAuthorization`, `RequireAuthorizationPerOperation`, an `[Authorize]`

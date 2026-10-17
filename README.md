@@ -18,9 +18,9 @@ dependency, and code that exposes no endpoint takes no dependency on ASP.NET Cor
 
 | Package | Contents | Depends on |
 | --- | --- | --- |
-| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment`, `Space` and `Actor`, the event marker and the publication port | .NET only |
+| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment`, `Space` and `Actor`, the module identity, the event marker and the publication port | .NET only |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
-| `Stellaegis.Primitives.AspNetCore` | The request context port, giving the space and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
+| `Stellaegis.Primitives.AspNetCore` | The routes' module, the request context port, giving the space and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
 writes a relational database. Depending on `Stellaegis.Primitives.AspNetCore` says that it maps HTTP
@@ -307,6 +307,35 @@ a list as its values:
 new { compartments = compartments.Select(c => c.Value) }   // where compartment in @compartments
 ```
 
+## The identity of a module
+
+A module declares its identity once, as a type carrying its name. Code that needs to know a module takes the
+type, never a string, so the name is written in one place:
+
+```csharp
+public sealed class DocumentsModule : IStellaegisModule
+{
+    public static string Name => "documents";
+}
+```
+
+The name is 1 to 63 lowercase letters, digits and single hyphens, starting with a letter and ending with a
+letter or a digit. `IStellaegisModule` lives in `Stellaegis.Primitives`: a module without endpoints declares
+its identity the same way.
+
+A module that exposes endpoints declares that its routes belong to it, on the group it maps onto — with or
+without compartments:
+
+```csharp
+var group = routes.MapGroup("/rendering").BelongsTo<RenderingModule>();
+```
+
+Every route labelled with an `Operation` belongs to a module, and the startup check fails on one that does
+not; an application labelling routes of its own declares a module of its own. Two module types carrying the
+same name fail the startup too. `BelongsTo` fails when the startup check is not registered: a module without
+compartments registers it from its own registration with `AddStellaegisStartupCheck()`, and
+`AddStellaegisRequestContext` registers it for the others.
+
 ## The request context of an HTTP module
 
 A module that exposes endpoints needs two things from each request: the space it acts in — a compartment,
@@ -371,7 +400,7 @@ and fails every request on a duplicate. The startup check fails first, naming th
 
 ### Inside a module
 
-An endpoint receives the port by injection. The mapping method declares its group with
+An endpoint receives the port by injection. The mapping method declares its group with `BelongsTo`, then
 `RequireRequestContext`, which fails the startup when no request context is registered, naming the line
 to add, and states whether the module accepts the shared space:
 
@@ -379,7 +408,8 @@ to add, and states whether the module accepts the shared space:
 public static RouteGroupBuilder MapDocumentsEndpoints(this IEndpointRouteBuilder routes)
 {
     var group = routes.MapGroup("/documents")
-        .RequireRequestContext("Documents", acceptsSharedSpace: true);
+        .BelongsTo<DocumentsModule>()
+        .RequireRequestContext(acceptsSharedSpace: true);
     group.MapGet("/{id}", (Guid id, IRequestContext context, DocumentService documents) =>
         context.Space is { } space ? documents.Get(space, id) : Results.NotFound());
     return group;
@@ -387,10 +417,10 @@ public static RouteGroupBuilder MapDocumentsEndpoints(this IEndpointRouteBuilder
 ```
 
 Not every module has a shared space, and refusal is the default: a module without one writes
-`.RequireRequestContext("Notifications")`, and an application marking it `InSharedSpace()` fails to start.
+`.RequireRequestContext()`, and an application marking it `InSharedSpace()` fails to start.
 The declaration closest to a route counts, so a sub-group declares again to differ — administration
-routes kept out of the shared space, for instance. A marked route that belongs to no module fails the
-startup too; an application serving routes of its own in the shared space declares them the same way.
+routes kept out of the shared space, for instance. A marked route that declares no request context fails
+the startup too; an application serving routes of its own in the shared space declares them the same way.
 
 The port serves the endpoints and filters only. The module's core takes the space and the actor as
 parameters — a `Space`, never `null`: a singleton receiving the port would keep the context of the first
@@ -451,11 +481,17 @@ app.MapGroup("/api").MapDocumentsEndpoints().RequireAuthorization().AllowAnyReso
 
 ### Checked at startup
 
-Registering a request context also registers a startup check of the routes. The application fails to
-start when two routes share a name — ASP.NET Core would fail every request; when a route marked `InSharedSpace()` has no declaration accepting the shared space; when a route
-labelled with an operation declares no authorization — neither a requirement nor `AllowAnonymous()`, a
-fallback policy not counting; when it has neither an authorization handler for operations nor
-`AllowAnyResource()`; or when a policy it requires is not registered. The message names the routes and the way out.
+`AddStellaegisStartupCheck()`, which registering a request context calls too, registers a startup check
+of the routes. The application fails to start, with a message naming the routes and the way out, when:
+
+- two routes share a name — ASP.NET Core would fail every request;
+- two module types carry the same name;
+- a route marked `InSharedSpace()` has no declaration accepting the shared space;
+- a route labelled with an operation belongs to no module;
+- it declares no authorization — neither a requirement nor `AllowAnonymous()`, a fallback policy not
+  counting;
+- it has neither an authorization handler for operations nor `AllowAnyResource()`;
+- a policy it requires is not registered.
 
 Handler detection resolves the registered handlers, so a handler registered by a factory is seen. It
 cannot know which resources a handler covers: one handler for operations is enough to pass, and a handler
