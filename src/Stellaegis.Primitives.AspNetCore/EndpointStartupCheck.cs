@@ -9,8 +9,9 @@ namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
 /// Fails the startup when a route is in the shared space without a declaration accepting it; when a route
-/// labelled with an <see cref="Operation"/> would refuse every resource — no authorization handler for operations,
-/// and no <c>AllowAnyResource</c>; or when it requires a policy that does not exist.
+/// labelled with an <see cref="Operation"/> declares no authorization — neither a requirement nor
+/// <c>AllowAnonymous</c>; when it would refuse every resource — no authorization handler for operations, and no
+/// <c>AllowAnyResource</c>; or when it requires a policy that does not exist.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -64,6 +65,16 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         if (endpoints.Count == 0)
             return;
 
+        var open = endpoints.Where(endpoint => !DeclaresAuthorization(endpoint)).ToList();
+        if (open.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"These routes are labelled with an Operation and declare no authorization: {Describe(open)}. "
+                + "Require it, with RequireAuthorization(...) or RequireAuthorizationPerOperation(...), "
+                + "or declare the routes open to anyone, with .AllowAnonymous(). A fallback policy does not count: "
+                + "it does not know the operation.");
+        }
+
         var closed = endpoints
             .Where(endpoint => endpoint.Metadata.GetMetadata<AllowAnyResourceMetadata>() is null)
             .ToList();
@@ -90,6 +101,12 @@ internal sealed class EndpointStartupCheck : IStartupFilter
                 + "Declare them with AddAuthorization(options => options.AddPolicy(...)).");
         }
     }
+
+    // The forms ASP.NET Core's authorization middleware reads on an endpoint: an attribute or RequireAuthorization
+    // with policy names, a policy object, requirements, or the anonymous declaration.
+    private static bool DeclaresAuthorization(Endpoint endpoint)
+        => endpoint.Metadata.Any(metadata => metadata
+            is IAuthorizeData or AuthorizationPolicy or IAuthorizationRequirementData or IAllowAnonymous);
 
     private static bool AnyOperationHandler(IServiceProvider services)
     {

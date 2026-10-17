@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** the startup check fails when a route labelled with an `Operation` declares no authorization —
+  neither a requirement (`RequireAuthorization`, `RequireAuthorizationPerOperation`, an `[Authorize]`
+  attribute) nor `AllowAnonymous()` —, naming the routes. Such a route used to be served open. A fallback
+  policy does not count: it does not know the operation, and would open every operation of a module to any
+  user it admits (`Stellaegis.Primitives.AspNetCore`).
+
 ## [2.0.0] — 2026-10-14
 
 The shared space: data that belongs to no compartment, reached only by the routes an application marks for

@@ -151,7 +151,7 @@ public class OperationTests
     {
         await using var app = await StartNotesAsync(
             services => services.AddAuthorization().AddSingleton<IAuthorizationHandler, OwnerRule>(),
-            group => group);
+            group => group.AllowAnonymous());
 
         Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/notes/jane-1", (TestApp.NameIdentifier, "jane"))));
         Assert.Equal(HttpStatusCode.NotFound, await StatusAsync(app, TestApp.Request("/notes/john-1", (TestApp.NameIdentifier, "jane"))));
@@ -161,7 +161,7 @@ public class OperationTests
     [Fact]
     public async Task Allowing_any_resource_skips_the_question()
     {
-        await using var app = await StartNotesAsync(_ => { }, group => group.AllowAnyResource());
+        await using var app = await StartNotesAsync(_ => { }, group => group.AllowAnyResource().AllowAnonymous());
 
         Assert.Equal("john-1", await app.GetTestClient().GetStringAsync("/notes/john-1", Ct));
     }
@@ -170,7 +170,7 @@ public class OperationTests
     public async Task Neither_a_handler_nor_an_open_declaration_fails_the_startup()
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            StartNotesAsync(services => services.AddAuthorization(), group => group));
+            StartNotesAsync(services => services.AddAuthorization(), group => group.AllowAnonymous()));
 
         Assert.Contains("notes.read", exception.Message);
         Assert.Contains("AuthorizationHandler<Operation, TResource>", exception.Message);
@@ -182,7 +182,7 @@ public class OperationTests
     {
         await using var app = await StartNotesAsync(
             services => services.AddAuthorization().AddScoped<IAuthorizationHandler>(_ => new OwnerRule()),
-            group => group);
+            group => group.AllowAnonymous());
 
         Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/notes/jane-1", (TestApp.NameIdentifier, "jane"))));
     }
@@ -192,7 +192,7 @@ public class OperationTests
     {
         await using var app = await StartNotesAsync(
             services => services.AddAuthorization().AddSingleton<IAuthorizationHandler, AnythingRule>(),
-            group => group);
+            group => group.AllowAnonymous());
 
         Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/notes/john-1")));
     }
@@ -202,7 +202,68 @@ public class OperationTests
     {
         await Assert.ThrowsAsync<InvalidOperationException>(() => StartNotesAsync(
             services => services.AddAuthorization().AddSingleton<IAuthorizationHandler, MemberOfCompartmentRule>(),
-            group => group));
+            group => group.AllowAnonymous()));
+    }
+
+    [Fact]
+    public async Task A_route_without_authorization_fails_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            StartNotesAsync(services => services.AddAuthorization(), group => group.AllowAnyResource()));
+
+        Assert.Contains("notes.read", exception.Message);
+        Assert.Contains("notes.write", exception.Message);
+        Assert.Contains("RequireAuthorization", exception.Message);
+        Assert.Contains("AllowAnonymous", exception.Message);
+    }
+
+    // The fallback policy does not know the operation: a host requiring an authenticated user would open every
+    // operation of a module, its purge included, to any user signed in.
+    [Fact]
+    public async Task A_fallback_policy_does_not_count_as_authorization()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => StartNotesAsync(
+            services => services.AddAuthorization(options =>
+                options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build()),
+            group => group.AllowAnyResource()));
+    }
+
+    [Fact]
+    public async Task Only_the_routes_without_authorization_are_named()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")).AddAuthorization(),
+            routes =>
+            {
+                var group = routes.MapGroup("/open").RequireRequestContext("Open").AllowAnyResource();
+                group.MapGet("/secured", () => "secured").WithMetadata(NotesModule.Read).RequireAuthorization();
+                group.MapPost("/forgotten", () => "forgotten").WithMetadata(NotesModule.Write);
+            }));
+
+        Assert.Contains("notes.write", exception.Message);
+        Assert.DoesNotContain("notes.read", exception.Message);
+    }
+
+    [Fact]
+    public async Task Every_form_of_authorization_counts()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("main")).AddAuthorization(),
+            routes =>
+            {
+                var group = routes.MapGroup("/forms").RequireRequestContext("Forms").AllowAnyResource();
+                group.MapGet("/attribute", () => "attribute").WithMetadata(NotesModule.Read).RequireAuthorization();
+                group.MapGet("/policy", () => "policy").WithMetadata(NotesModule.Read)
+                    .RequireAuthorization(new AuthorizationPolicyBuilder().RequireClaim("role").Build());
+                group.MapGet("/builder", () => "builder").WithMetadata(NotesModule.Read)
+                    .RequireAuthorization(policy => policy.RequireClaim("role"));
+                group.MapGet("/anonymous", () => "anonymous").WithMetadata(NotesModule.Read).AllowAnonymous();
+            });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await StatusAsync(app, TestApp.Request("/forms/attribute")));
+        Assert.Equal(HttpStatusCode.Unauthorized, await StatusAsync(app, TestApp.Request("/forms/policy")));
+        Assert.Equal(HttpStatusCode.Unauthorized, await StatusAsync(app, TestApp.Request("/forms/builder")));
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/forms/anonymous")));
     }
 
     [Fact]

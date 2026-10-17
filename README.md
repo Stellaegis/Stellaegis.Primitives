@@ -358,8 +358,8 @@ A module that holds data belonging to no compartment serves it in the shared spa
 chooses the routes that reach it, by marking a group:
 
 ```csharp
-app.MapGroup("/api/orgs/{org}").MapDocumentsEndpoints();
-app.MapGroup("/api/shared").MapDocumentsEndpoints().InSharedSpace();
+app.MapGroup("/api/orgs/{org}").MapDocumentsEndpoints().RequireAuthorization("member");
+app.MapGroup("/api/shared").MapDocumentsEndpoints().InSharedSpace().RequireAuthorization("platform-admin");
 ```
 
 On a marked route the space is `Space.Shared`, and the source's compartment is not read. A source knows
@@ -407,7 +407,7 @@ group.MapGet("/{id}", ...).WithMetadata(Read);
 
 | What | Who decides | How |
 | --- | --- | --- |
-| Who may call a route | the application | `.RequireAuthorization(...)`, or a policy per operation |
+| Who may call a route | the application | `.RequireAuthorization(...)`, a policy per operation, or `.AllowAnonymous()` — one of them, always |
 | Who may access a resource the route loads | the application | an authorization handler on the resource, or `.AllowAnyResource()` |
 | Which operation a route performs | the module | `Operation` metadata |
 
@@ -420,7 +420,8 @@ app.MapGroup("/api").MapDocumentsEndpoints()
 
 `RequireAuthorizationPerOperation` is a final convention: an ordinary group convention runs before a route
 has its own metadata, and could not see the operation. A route without an operation is left to the
-application's fallback policy, if it sets one. A module's administration routes, such as a purge, are
+application's fallback policy, if it sets one; a route with one is not, since the fallback policy does not
+know the operation. A module's administration routes, such as a purge, are
 mapped by a method of their own, so that a policy attached per kind cannot open them by accident.
 
 ASP.NET Core runs final conventions when it builds its endpoints, at the first request. Do not add an
@@ -442,15 +443,16 @@ application that lets any user reaching the routes access any resource declares 
 `[AllowAnonymous]`:
 
 ```csharp
-app.MapGroup("/api").MapDocumentsEndpoints().AllowAnyResource();
+app.MapGroup("/api").MapDocumentsEndpoints().RequireAuthorization().AllowAnyResource();
 ```
 
 ### Checked at startup
 
 Registering a request context also registers a startup check of the routes. The application fails to
 start when a route marked `InSharedSpace()` has no declaration accepting the shared space; when a route
-labelled with an operation has neither an authorization handler for operations nor `AllowAnyResource()`;
-or when a policy it requires is not registered. The message names the routes and the way out.
+labelled with an operation declares no authorization — neither a requirement nor `AllowAnonymous()`, a
+fallback policy not counting; when it has neither an authorization handler for operations nor
+`AllowAnyResource()`; or when a policy it requires is not registered. The message names the routes and the way out.
 
 Handler detection resolves the registered handlers, so a handler registered by a factory is seen. It
 cannot know which resources a handler covers: one handler for operations is enough to pass, and a handler
