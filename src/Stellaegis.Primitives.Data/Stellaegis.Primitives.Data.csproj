@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Stellaegis.Primitives.Data</RootNamespace>
     <PackageId>Stellaegis.Primitives.Data</PackageId>
-    <Description>Stellaegis data primitives for modules that use a database: unit of work per database, connection factory, Dapper type handlers for the primitive types, and the patterns that go with them.</Description>
+    <Description>Stellaegis data primitives for modules that use a database: unit of work per database, opened in a space for an actor that the database reads from its session context (SQL Server, PostgreSQL), Dapper type handlers for the primitive types, and the patterns that go with them.</Description>
     <PackageTags>stellaegis;unit-of-work;ado-net;database</PackageTags>
   </PropertyGroup>
 

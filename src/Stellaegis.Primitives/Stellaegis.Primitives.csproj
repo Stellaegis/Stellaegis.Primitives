@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Stellaegis.Primitives</RootNamespace>
     <PackageId>Stellaegis.Primitives</PackageId>
-    <Description>Stellaegis primitives shared by every module: results and errors, guards, user-facing exception, compartment and actor, event marker and publication port. No dependency beyond .NET.</Description>
+    <Description>Stellaegis primitives shared by every module: results and errors, guards, user-facing exception, compartment, space and actor, module identity, event marker and publication port. No dependency beyond .NET.</Description>
     <PackageTags>stellaegis;result;guard;compartment;events</PackageTags>
   </PropertyGroup>
 

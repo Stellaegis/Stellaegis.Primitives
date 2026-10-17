@@ -5,7 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.0] — 2026-10-17
+
+A module now has a typed identity, a route labelled with an operation is closed unless it declares its
+authorization, and a unit of work opens in a space, for an actor, which the database itself can read. The three
+packages move together to 3.0.0; `Stellaegis.Primitives.AspNetCore` breaks its API.
 
 ### Added
 
@@ -18,6 +22,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   calls it.
 - The startup check fails when a route labelled with an `Operation` belongs to no module, and when two
   module types carry the same name.
+- `SingleCompartment(Compartment)`: takes the constant an application declares once for its single
+  compartment, which its work outside requests passes to the modules too. The documentation recommends
+  naming that compartment after the organization owning the data, never a placeholder such as `main`, so
+  that taking a second organization migrates nothing.
 - `Space.ToSegment()` and `Space.SharedSegment`: the one projection of a space into an address segment — a
   vault path, a blob path, a cache key —, the compartment identifier or `_shared`. Not a serialization:
   nothing reads a space back from it (`Stellaegis.Primitives`).
@@ -32,29 +40,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   each unit of work from a function of the space and the actor (`Stellaegis.Primitives.Data`).
 - `IUnitOfWork` is also `IDisposable`: a plain `using` rolls back an open transaction and closes the
   connection, as `await using` does (`Stellaegis.Primitives.Data`).
-- `SingleCompartment(Compartment)`: takes the constant an application declares once for its single
-  compartment, which its work outside requests passes to the modules too. The documentation recommends
-  naming that compartment after the organization owning the data, never a placeholder such as `main`, so
-  that taking a second organization migrates nothing.
 
 ### Changed
-
-- **Breaking:** `RequireRequestContext(acceptsSharedSpace = false)` no longer takes the module name: the
-  module is declared by `BelongsTo<TModule>()`, which a module without compartments calls alone.
-- **Breaking:** `Operation(target, name, kind)` takes the type of data it acts on, `Target`, instead of the
-  module, `Module`: one module may act on several targets, `invoices` and `fiscal-years`. Its identity is
-  `target.name`, such as `invoices.validate`. Target and name follow the rule of module names — lowercase
-  letters, digits and single hyphens —, where any non-blank string was accepted.
-- The documentation presents a policy per operation, `op => op.ToString()`, as the usual way to secure a
-  module, and a policy per kind as a coarse fallback: the kind is a fact about the data, not a right.
-- The documentation of `Compartment` no longer offers a user as a compartment: a compartment isolates an
-  organization, and the records a user owns are a matter of ownership within it.
 
 - **Breaking:** the startup check fails when a route labelled with an `Operation` declares no authorization —
   neither a requirement (`RequireAuthorization`, `RequireAuthorizationPerOperation`, an `[Authorize]`
   attribute) nor `AllowAnonymous()` —, naming the routes. Such a route used to be served open. A fallback
   policy does not count: it does not know the operation, and would open every operation of a module to any
   user it admits (`Stellaegis.Primitives.AspNetCore`).
+- **Breaking:** `RequireRequestContext(acceptsSharedSpace = false)` no longer takes the module name: the
+  module is declared by `BelongsTo<TModule>()`, which a module without compartments calls alone.
+- **Breaking:** `Operation(target, name, kind)` takes the type of data it acts on, `Target`, instead of the
+  module, `Module`: one module may act on several targets, `invoices` and `fiscal-years`. Its identity is
+  `target.name`, such as `invoices.validate`. Target and name follow the rule of module names — lowercase
+  letters, digits and single hyphens —, where any non-blank string was accepted.
+- The documentation presents an operation as what a route does, granting nothing: a policy per operation,
+  `op => op.ToString()`, is the usual way to secure a module, and a policy per kind a coarse fallback, the
+  kind being a fact about the data, not a right. `AllowAnyResource()` also suits a database that filters
+  what a route loads by row-level security.
+- The documentation of `Compartment` no longer offers a user as a compartment: a compartment isolates an
+  organization, and the records a user owns are a matter of ownership within it.
 
 ### Fixed
 
@@ -62,6 +67,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Core lets such a host start, then fails every request: a module naming its routes and mapped once per
   compartment and once in the shared space did exactly that, as the README showed
   (`Stellaegis.Primitives.AspNetCore`).
+
+### Updating from 2.0.0
+
+- Declare the identity of each module, `public sealed class DocumentsModule : IStellaegisModule`, and its
+  routes with `BelongsTo<DocumentsModule>()` on the group; `RequireRequestContext("Documents", …)` becomes
+  `RequireRequestContext(…)`.
+- `new Operation("documents", "read", …)` keeps compiling: its first argument is now the target. Rename it
+  where the target differs from the module, and make target and name lowercase.
+- Give every labelled route an authorization requirement or `AllowAnonymous()`; an application relying on
+  its fallback policy declares `RequireAuthorization()` on the module's group.
+- An application using only modules without compartments calls `AddStellaegisStartupCheck()`.
+- A module mapped twice drops `WithName(...)` from its routes, or names each mapping apart.
+- Code using `Stellaegis.Primitives` and `Stellaegis.Primitives.Data` compiles unchanged: their changes are
+  additions. A class of your own implementing `IUnitOfWork` adds `Dispose()`.
 
 ## [2.0.0] — 2026-10-14
 
