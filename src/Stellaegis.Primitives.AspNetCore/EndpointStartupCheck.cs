@@ -8,7 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
-/// Fails the startup when a route is in the shared space without a declaration accepting it; when a route
+/// Fails the startup when two routes share a name; when a route is in the shared space without a declaration
+/// accepting it; when a route
 /// labelled with an <see cref="Operation"/> declares no authorization — neither a requirement nor
 /// <c>AllowAnonymous</c>; when it would refuse every resource — no authorization handler for operations, and no
 /// <c>AllowAnyResource</c>; or when it requires a policy that does not exist.
@@ -32,9 +33,31 @@ internal sealed class EndpointStartupCheck : IStartupFilter
     {
         next(app);
         var endpoints = app.ApplicationServices.GetService<EndpointDataSource>()?.Endpoints ?? [];
+        CheckEndpointNames(endpoints);
         CheckSharedSpace(endpoints);
         CheckOperations(app.ApplicationServices, endpoints);
     };
+
+    // ASP.NET Core compares endpoint names ordinally, and fails every request of the host on a duplicate: a module
+    // naming its routes and mapped twice — once per compartment, once in the shared space — is the usual cause.
+    private static void CheckEndpointNames(IEnumerable<Endpoint> all)
+    {
+        var duplicates = all
+            .Select(endpoint => (Endpoint: endpoint, Name: endpoint.Metadata.GetMetadata<IEndpointNameMetadata>()?.EndpointName))
+            .Where(named => named.Name is not null)
+            .GroupBy(named => named.Name!, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .ToList();
+        if (duplicates.Count > 0)
+        {
+            var described = duplicates.Select(group =>
+                $"'{group.Key}' on {string.Join(" and ", group.Select(named => named.Endpoint.DisplayName))}");
+            throw new InvalidOperationException(
+                $"These endpoint names are used more than once: {string.Join("; ", described)}. ASP.NET Core requires "
+                + "names unique across the host. A module mapped twice cannot name its routes: remove WithName(...) "
+                + "from them, or give each mapping its own names.");
+        }
+    }
 
     private static void CheckSharedSpace(IEnumerable<Endpoint> all)
     {

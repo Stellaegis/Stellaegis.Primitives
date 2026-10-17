@@ -366,6 +366,9 @@ On a marked route the space is `Space.Shared`, and the source's compartment is n
 nothing of the shared space and cannot produce it: the mark is the only way in. A group mapped without the
 mark reads the compartment as usual, and answers 404 where there is none.
 
+A module mapped twice cannot name its routes: ASP.NET Core requires endpoint names unique across the host,
+and fails every request on a duplicate. The startup check fails first, naming the routes.
+
 ### Inside a module
 
 An endpoint receives the port by injection. The mapping method declares its group with
@@ -449,7 +452,7 @@ app.MapGroup("/api").MapDocumentsEndpoints().RequireAuthorization().AllowAnyReso
 ### Checked at startup
 
 Registering a request context also registers a startup check of the routes. The application fails to
-start when a route marked `InSharedSpace()` has no declaration accepting the shared space; when a route
+start when two routes share a name — ASP.NET Core would fail every request; when a route marked `InSharedSpace()` has no declaration accepting the shared space; when a route
 labelled with an operation declares no authorization — neither a requirement nor `AllowAnonymous()`, a
 fallback policy not counting; when it has neither an authorization handler for operations nor
 `AllowAnyResource()`; or when a policy it requires is not registered. The message names the routes and the way out.

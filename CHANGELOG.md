@@ -15,6 +15,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   policy does not count: it does not know the operation, and would open every operation of a module to any
   user it admits (`Stellaegis.Primitives.AspNetCore`).
 
+### Fixed
+
+- The startup check fails when two routes share an endpoint name, naming the name and both routes. ASP.NET
+  Core lets such a host start, then fails every request: a module naming its routes and mapped once per
+  compartment and once in the shared space did exactly that, as the README showed
+  (`Stellaegis.Primitives.AspNetCore`).
+
 ## [2.0.0] — 2026-10-14
 
 The shared space: data that belongs to no compartment, reached only by the routes an application marks for

@@ -7,9 +7,10 @@ namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
 /// Registers the <see cref="IRequestContextSource"/> of an application and the <see cref="IRequestContext"/> read
-/// from it, both scoped to the request, along with the startup check of the routes: a route in the shared space
-/// is declared to accept it; a route labelled with an <see cref="Operation"/> declares its authorization, either
-/// has an authorization handler for its resources or allows any resource, and every policy it requires exists.
+/// from it, both scoped to the request, along with the startup check of the routes: no two routes share a name;
+/// a route in the shared space is declared to accept it; a route labelled with an <see cref="Operation"/>
+/// declares its authorization, either has an authorization handler for its resources or allows any resource,
+/// and every policy it requires exists.
 /// </summary>
 public static class RequestContextServiceCollectionExtensions
 {
