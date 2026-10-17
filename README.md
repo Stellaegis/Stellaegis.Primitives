@@ -91,7 +91,7 @@ A module partitions its data by **compartment**: a tenant, an organization, or t
 of a project that needs only one. A compartment isolates — what is in one is invisible from another —, it
 does not classify: an application that must cross the data of two has chosen the wrong boundary. Nor is a
 person a compartment: the records a user owns belong to the user within a compartment, by an ownership the
-application checks. A module records who performs an operation as an
+application declares, enforced by an authorization handler or by the database. A module records who performs an operation as an
 **actor**. Both are strings on the wire and in a database. In code they are distinct types, so that a
 compartment cannot be passed where an actor or a document type is expected.
 

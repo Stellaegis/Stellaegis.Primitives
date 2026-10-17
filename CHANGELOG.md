@@ -174,6 +174,8 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
+[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/releases/tag/v1.0.0
