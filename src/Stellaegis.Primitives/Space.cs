@@ -13,8 +13,10 @@ namespace Stellaegis.Primitives;
 /// an absence, and never turns into the shared space.
 /// </para>
 /// <para>
-/// Not every module has a shared space; one that has decides how it stores it. This type has no text form and
-/// no serialization for that reason.
+/// Not every module has a shared space; one that has decides how it stores it — a <see langword="null"/>
+/// column, for instance. This type has no serialization for that reason, and nothing reads a space back from
+/// text. It projects to an address segment, <see cref="ToSegment"/>, for the places where a space becomes part
+/// of a key: a vault path, a blob path, a session context value, a cache key.
 /// </para>
 /// </remarks>
 public sealed class Space : IEquatable<Space>
@@ -26,6 +28,12 @@ public sealed class Space : IEquatable<Space>
 
     /// <summary>The compartment, or <see langword="null"/> exactly when this is the shared space.</summary>
     public Compartment? Compartment { get; }
+
+    /// <summary>
+    /// The segment the shared space takes in an address, <c>_shared</c>. No compartment can carry it: the
+    /// compartment rule refuses the underscore.
+    /// </summary>
+    public const string SharedSegment = "_shared";
 
     /// <summary>Whether this is the shared space.</summary>
     [MemberNotNullWhen(false, nameof(Compartment))]
@@ -56,6 +64,13 @@ public sealed class Space : IEquatable<Space>
 
     /// <summary>Value inequality.</summary>
     public static bool operator !=(Space? left, Space? right) => !(left == right);
+
+    /// <summary>
+    /// The space as a segment of an address — a vault path, a blob path, a key: the compartment identifier, or
+    /// <see cref="SharedSegment"/>. One projection for every module, so two of them never disagree. It is not a
+    /// serialization: nothing reads a space back from it.
+    /// </summary>
+    public string ToSegment() => Compartment?.Value ?? SharedSegment;
 
     /// <summary>The compartment identifier, or <c>(shared)</c>. For display only: it is not a storage format.</summary>
     public override string ToString() => Compartment?.Value ?? "(shared)";

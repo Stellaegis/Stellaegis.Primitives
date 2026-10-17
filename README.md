@@ -119,8 +119,16 @@ if (space.IsShared) { ... }                     // otherwise space.Compartment i
 
 The shared space is not a compartment, so its `Compartment` is `null`. A `null` compartment converts to
 a `null` space, never to the shared space: a compartment that could not be resolved never grants access
-to shared data. A module that has a shared space decides how it stores it; `Space` has no text form and
-no serialization.
+to shared data. A module that has a shared space decides how it stores it — a `null` column, for
+instance; `Space` has no serialization, and nothing reads a space back from text.
+
+Where a space becomes part of an address — a vault path, a blob path, a cache key — every module projects
+it the same way, with `ToSegment()`: the compartment identifier, or `_shared` (`Space.SharedSegment`),
+which no compartment can carry since the rule refuses the underscore.
+
+```csharp
+var path = $"messaging.{space.ToSegment()}";   // messaging.acme, or messaging._shared
+```
 
 Uppercase is rejected rather than converted. Two equal compartments therefore always carry the same
 string, and an ordinal comparison is enough in a database, a cache key or a file path. The cost falls
@@ -215,7 +223,7 @@ await uow.CommitAsync(ct);
 
 `OpenAsync` opens a unit of work without a transaction, for reads. `OpenAndBeginAsync` also begins a
 transaction. Disposing a unit of work whose transaction was neither committed nor rolled back rolls it
-back.
+back, whether with `await using` or a plain `using`; disposing it twice does nothing.
 
 `Repo<T>()` builds the repository on first use and returns the same instance afterwards. The type it
 returns is checked by the compiler. Whether a factory was registered for that type is only checked

@@ -62,6 +62,18 @@ public class SpaceTests
     }
 
     [Fact]
+    public void A_segment_is_the_compartment_or_the_shared_segment()
+    {
+        Assert.Equal("acme", Space.Of(Compartment.Parse("acme")).ToSegment());
+        Assert.Equal("_shared", Space.Shared.ToSegment());
+        Assert.Equal(Space.SharedSegment, Space.Shared.ToSegment());
+    }
+
+    [Fact]
+    public void No_compartment_takes_the_shared_segment()
+        => Assert.False(Compartment.TryParse(Space.SharedSegment, out _));
+
+    [Fact]
     public void ToString_shows_the_compartment_or_shared()
     {
         Assert.Equal("acme", $"{Space.Of(Compartment.Parse("acme"))}");

@@ -78,13 +78,19 @@ internal sealed class InMemoryUnitOfWork<TDatabase>(
     /// <summary>Rolls back an active transaction, as the relational unit of work does, then drops the repository cache.</summary>
     public ValueTask DisposeAsync()
     {
-        if (_disposed) return ValueTask.CompletedTask;
+        Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc cref="DisposeAsync"/>
+    public void Dispose()
+    {
+        if (_disposed) return;
         _disposed = true;
 
         if (_hasActiveTransaction)
             Undo();
         _repositories.Clear();
-        return ValueTask.CompletedTask;
     }
 
     private void TakeSnapshot(object repository)

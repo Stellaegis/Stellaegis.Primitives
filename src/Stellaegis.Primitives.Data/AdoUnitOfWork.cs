@@ -104,5 +104,27 @@ internal sealed class AdoUnitOfWork<TDatabase>(
         _repositories.Clear();
     }
 
+    /// <summary>The synchronous counterpart of <see cref="DisposeAsync"/>.</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _events.Discard();
+
+        if (_transaction is not null)
+        {
+            try { _transaction.Rollback(); }
+            catch (Exception ex) when (ex is DbException or InvalidOperationException)
+            {
+                // Best effort: the connection may be broken, or the transaction already completed.
+            }
+            _transaction.Dispose();
+            _transaction = null;
+        }
+
+        connection.Dispose();
+        _repositories.Clear();
+    }
+
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 }

@@ -9,9 +9,10 @@ namespace Stellaegis.Primitives.Data;
 /// The <b>type</b> returned by <see cref="Repo{TRepo}"/> is checked at compile time; the <b>availability</b>
 /// of a repository (whether a factory was registered for it) is checked at run time, and an unregistered
 /// repository fails fast with <see cref="RepositoryNotRegisteredException"/>. Disposing a unit of work with
-/// an active transaction rolls it back.
+/// an active transaction rolls it back, whether it is disposed synchronously or asynchronously; disposing it
+/// again does nothing.
 /// </remarks>
-public interface IUnitOfWork : IAsyncDisposable
+public interface IUnitOfWork : IAsyncDisposable, IDisposable
 {
     /// <summary>Whether a transaction is currently active.</summary>
     bool HasActiveTransaction { get; }

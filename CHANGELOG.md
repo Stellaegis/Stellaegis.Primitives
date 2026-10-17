@@ -18,6 +18,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   calls it.
 - The startup check fails when a route labelled with an `Operation` belongs to no module, and when two
   module types carry the same name.
+- `Space.ToSegment()` and `Space.SharedSegment`: the one projection of a space into an address segment — a
+  vault path, a blob path, a cache key —, the compartment identifier or `_shared`. Not a serialization:
+  nothing reads a space back from it (`Stellaegis.Primitives`).
+- `IUnitOfWork` is also `IDisposable`: a plain `using` rolls back an open transaction and closes the
+  connection, as `await using` does (`Stellaegis.Primitives.Data`).
 - `SingleCompartment(Compartment)`: takes the constant an application declares once for its single
   compartment, which its work outside requests passes to the modules too. The documentation recommends
   naming that compartment after the organization owning the data, never a placeholder such as `main`, so

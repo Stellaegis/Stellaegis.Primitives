@@ -77,6 +77,20 @@ public abstract class UnitOfWorkContractTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Synchronous_dispose_without_commit_rolls_back_and_discards_events()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using (var uow = await Factory.OpenAndBeginAsync(ct))
+        {
+            await uow.Repo<IWidgetRepository>().InsertAsync("a", ct);
+            uow.Publish(Added("a"));
+        }
+
+        Assert.Equal(0, await CountCommittedAsync());
+        Assert.Empty(Publisher.Published);
+    }
+
+    [Fact]
     public async Task Repository_resolved_before_begin_is_rolled_back_too()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -159,6 +173,17 @@ public abstract class UnitOfWorkContractTests : IAsyncLifetime
         var uow = await Factory.OpenAsync(TestContext.Current.CancellationToken);
         await uow.DisposeAsync();
         await uow.DisposeAsync();
+
+        Assert.Throws<ObjectDisposedException>(() => uow.Repo<IWidgetRepository>());
+    }
+
+    [Fact]
+    public async Task Synchronous_and_asynchronous_dispose_mix_and_repeat()
+    {
+        var uow = await Factory.OpenAsync(TestContext.Current.CancellationToken);
+        uow.Dispose();
+        await uow.DisposeAsync();
+        uow.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => uow.Repo<IWidgetRepository>());
     }
