@@ -8,13 +8,13 @@
     <!-- Testing -->
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <!-- Pinned above what Microsoft.Data.SqlClient brings, 9.0.x: CVE-2026-84008, fixed in 10.0.13 -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.13" />
     <!-- Force the 3.x native bundle: Microsoft.Data.Sqlite still pulls the legacy
          SQLitePCLRaw.lib.e_sqlite3 (CVE GHSA-2m69-gcr7-jv3q, no fix under that name).
          The 3.x bundle pulls the renamed, patched SourceGear.sqlite3 native. -->
