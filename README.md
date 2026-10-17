@@ -96,7 +96,7 @@ application checks. A module records who performs an operation as an
 compartment cannot be passed where an actor or a document type is expected.
 
 ```csharp
-var main = Compartment.Parse("main");          // a value the code knows to be valid
+var acme = Compartment.Parse("acme");          // a value the code knows to be valid
 if (!Compartment.TryParse(routeValue, out var compartment))
     return Results.NotFound();                  // a value read from a request
 
@@ -347,7 +347,21 @@ application's decision: a route segment, a claim, a subdomain, a constant. The m
 port, `IRequestContext`. The application registers the source it is read from.
 
 ```csharp
-builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment("main"));
+builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment("acme"));
+```
+
+An application with a single compartment names it after the organization that owns the data, never a
+placeholder such as `main`: the day it manages a second organization, the first keeps its name, and nothing
+is migrated. It declares that compartment once, as a constant, which its work outside requests — a
+scheduled task, an import — passes to the modules too:
+
+```csharp
+public static class Tenant
+{
+    public static readonly Compartment Owner = Compartment.Parse("acme");
+}
+
+builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment(Tenant.Owner));
 ```
 
 The configurable source takes one compartment source — `SingleCompartment`, `CompartmentFromRoute`,

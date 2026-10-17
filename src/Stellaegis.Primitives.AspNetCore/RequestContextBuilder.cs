@@ -21,11 +21,23 @@ public sealed class RequestContextBuilder
     {
     }
 
-    /// <summary>Every request addresses the same compartment — a project that needs only one.</summary>
+    /// <summary>
+    /// Every request addresses the same compartment — an application that needs only one. Name it after the
+    /// organization that owns the data, as a real compartment: the day the application takes a second one, the
+    /// first keeps its name, and nothing is migrated.
+    /// </summary>
     /// <exception cref="FormatException"><paramref name="compartment"/> is not a valid compartment.</exception>
     public RequestContextBuilder SingleCompartment(string compartment)
+        => SingleCompartment(Compartment.Parse(Guard.NotNull(compartment)));
+
+    /// <inheritdoc cref="SingleCompartment(string)"/>
+    /// <remarks>
+    /// Takes the constant the application declares once, which its work outside requests — a scheduled task,
+    /// an import — passes to the modules as well.
+    /// </remarks>
+    public RequestContextBuilder SingleCompartment(Compartment compartment)
     {
-        var single = Compartment.Parse(Guard.NotNull(compartment));
+        var single = Guard.NotNull(compartment);
         return SetCompartment(_ => single);
     }
 

@@ -30,6 +30,10 @@ public class RequestContextTests
         => Assert.Equal("main|anonymous", await EchoAsync(c => c.SingleCompartment("main"), TestApp.Request("/echo")));
 
     [Fact]
+    public async Task A_single_compartment_from_the_application_constant()
+        => Assert.Equal("acme|anonymous", await EchoAsync(c => c.SingleCompartment(Compartment.Parse("acme")), TestApp.Request("/echo")));
+
+    [Fact]
     public async Task The_actor_defaults_to_the_name_identifier_claim()
         => Assert.Equal("main|jane", await EchoAsync(
             c => c.SingleCompartment("main"),

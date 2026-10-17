@@ -18,6 +18,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   calls it.
 - The startup check fails when a route labelled with an `Operation` belongs to no module, and when two
   module types carry the same name.
+- `SingleCompartment(Compartment)`: takes the constant an application declares once for its single
+  compartment, which its work outside requests passes to the modules too. The documentation recommends
+  naming that compartment after the organization owning the data, never a placeholder such as `main`, so
+  that taking a second organization migrates nothing.
 
 ### Changed
 

@@ -14,7 +14,7 @@ public static class RequestContextServiceCollectionExtensions
     /// Registers the configurable request context source, reading the compartment and the actor from the
     /// sources declared by <paramref name="configure"/>:
     /// <code>
-    /// builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment("main"));
+    /// builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment("acme"));
     /// </code>
     /// </summary>
     /// <exception cref="InvalidOperationException">
