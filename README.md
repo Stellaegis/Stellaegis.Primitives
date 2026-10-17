@@ -87,8 +87,11 @@ The cost of this choice is precision: a category cannot express every HTTP statu
 
 ## Compartments and actors
 
-A module partitions its data by **compartment**: a tenant, an organization, a user, or the single
-compartment of a project that needs only one. A module records who performs an operation as an
+A module partitions its data by **compartment**: a tenant, an organization, or the single compartment
+of a project that needs only one. A compartment isolates — what is in one is invisible from another —, it
+does not classify: an application that must cross the data of two has chosen the wrong boundary. Nor is a
+person a compartment: the records a user owns belong to the user within a compartment, by an ownership the
+application checks. A module records who performs an operation as an
 **actor**. Both are strings on the wire and in a database. In code they are distinct types, so that a
 compartment cannot be passed where an actor or a document type is expected.
 
@@ -102,8 +105,8 @@ var actor = Actor.Parse("job:purge");
 
 A compartment is an identifier of 3 to 63 characters: a lowercase letter first, then lowercase letters,
 digits and single hyphens, ending with a letter or a digit. The type knows no special value: you name
-every compartment. To compartment by a technical identifier, prefix it — `u` followed by a GUID in the
-`N` format, for instance.
+every compartment. To compartment by a technical identifier, prefix it — `o` followed by an
+organization's GUID in the `N` format, for instance.
 
 Data that belongs to no compartment is not stored in a compartment set apart for it, since any name the
 rule accepts could also be a real compartment. A module that holds such data has a **shared space**. A
@@ -428,34 +431,49 @@ request, and work done outside a request — a scheduled task, an import — has
 
 ## Securing a module's routes and data
 
-A module does not decide who may call it. It labels each route with an `Operation` — module, name, and a
-kind, `Read`, `Write` or `Delete`, declared rather than deduced from the HTTP verb — and the application
-attaches its own security to the group the module returns.
+A module does not decide who may call it. It labels each route with an `Operation`, which says what the
+route does, and the application attaches its own security to the group the module returns.
 
 ```csharp
-public static readonly Operation Read = new("documents", "read", OperationKind.Read);
+public static readonly Operation ValidateInvoices = new("invoices", "validate", OperationKind.Write);
 
-group.MapGet("/{id}", ...).WithMetadata(Read);
+group.MapPost("/invoices/{id}/validate", ...).WithMetadata(ValidateInvoices);
 ```
+
+An operation carries two things, and grants neither:
+
+| | What it says | Example |
+| --- | --- | --- |
+| Its identity, `target.name` | which operation — the key an application grants | `invoices.validate` |
+| Its kind | what it does to the data, declared rather than deduced from the HTTP verb | `Write` |
+
+The target is a type of data, never an instance: one module may act on several targets, `invoices` and
+`fiscal-years`. Target and name follow the rule of module names. The kind — `Read`, `Write` or `Delete` —
+is a fact about the data, read for audit or to refuse writes during a maintenance as much as for security.
+Administration is not a kind: it is an audience, and a module maps its administration routes separately.
 
 | What | Who decides | How |
 | --- | --- | --- |
+| Which operation a route performs | the module | `Operation` metadata |
+| Which module a route belongs to | the module | `BelongsTo<TModule>()` |
 | Who may call a route | the application | `.RequireAuthorization(...)`, a policy per operation, or `.AllowAnonymous()` — one of them, always |
 | Who may access a resource the route loads | the application | an authorization handler on the resource, or `.AllowAnyResource()` |
-| Which operation a route performs | the module | `Operation` metadata |
 
 ### A policy per operation
 
 ```csharp
 app.MapGroup("/api").MapDocumentsEndpoints()
-   .RequireAuthorizationPerOperation(op => op.Kind == OperationKind.Read ? "reader" : "writer");
+   .RequireAuthorizationPerOperation(op => op.ToString());   // "documents.read", "documents.write", ...
 ```
+
+The application declares one policy per operation, which its rights system answers. An application without
+rights of its own may choose by kind instead — `op => op.Kind == OperationKind.Read ? "reader" : "writer"` —
+a coarse fallback, which a module's separate administration routes keep from opening a purge.
 
 `RequireAuthorizationPerOperation` is a final convention: an ordinary group convention runs before a route
 has its own metadata, and could not see the operation. A route without an operation is left to the
 application's fallback policy, if it sets one; a route with one is not, since the fallback policy does not
-know the operation. A module's administration routes, such as a purge, are
-mapped by a method of their own, so that a policy attached per kind cannot open them by accident.
+know the operation.
 
 ASP.NET Core runs final conventions when it builds its endpoints, at the first request. Do not add an
 endpoint filter from one: ASP.NET Core ignores it without an error.

@@ -6,11 +6,16 @@ using System.Text.RegularExpressions;
 namespace Stellaegis.Primitives;
 
 /// <summary>
-/// The compartment a piece of data belongs to: the access boundary a module partitions its data by —
-/// a tenant, an organization, a user, or the single compartment of a simple project. The consumer
-/// names its compartments; this type knows no special value.
+/// The compartment a piece of data belongs to: the boundary a module isolates its data by — a tenant, an
+/// organization, or the single compartment of a project that needs only one. What is in one compartment is
+/// invisible from another. The consumer names its compartments; this type knows no special value.
 /// </summary>
 /// <remarks>
+/// <para>
+/// A compartment isolates, it does not classify: an application that must cross the data of two of them has
+/// chosen the wrong boundary. Nor is a person a compartment: the records a user owns belong to the user within a
+/// compartment, by an ownership the application checks.
+/// </para>
 /// <para>
 /// Data that belongs to no compartment lives in the shared space of a module that has one,
 /// <see cref="Space.Shared"/>, and never in a compartment set apart for it: a name the rule accepts is a
@@ -23,8 +28,8 @@ namespace Stellaegis.Primitives;
 /// same string, and an ordinal comparison is enough in a database, a cache key or a blob path.
 /// </para>
 /// <para>
-/// A consumer that compartments by technical identifier prefixes it, for example <c>u</c> followed by a
-/// GUID in the <c>N</c> format. On the wire and in a database the value stays a plain string.
+/// A consumer that compartments by technical identifier prefixes it, for example <c>o</c> followed by an
+/// organization's GUID in the <c>N</c> format. On the wire and in a database the value stays a plain string.
 /// </para>
 /// </remarks>
 [JsonConverter(typeof(CompartmentJsonConverter))]

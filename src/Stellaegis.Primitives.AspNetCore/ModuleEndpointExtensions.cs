@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>What a module declares about the routes it maps.</summary>
-public static partial class ModuleEndpointExtensions
+public static class ModuleEndpointExtensions
 {
     /// <summary>
     /// Declares that the endpoints of <paramref name="group"/> belong to <typeparamref name="TModule"/>. A module
@@ -31,11 +30,10 @@ public static partial class ModuleEndpointExtensions
     {
         Guard.NotNull(group);
         var name = TModule.Name;
-        if (name is null || name.Length > 63 || !NameRule().IsMatch(name))
+        if (!Slug.IsValid(name))
         {
             throw new ArgumentException(
-                $"'{name}', the name of {typeof(TModule).Name}, is not a valid module name: 1 to 63 lowercase letters, "
-                + "digits and single hyphens, starting with a letter and ending with a letter or a digit.",
+                $"'{name}', the name of {typeof(TModule).Name}, is not a valid module name: {Slug.Rule}.",
                 nameof(TModule));
         }
 
@@ -50,9 +48,6 @@ public static partial class ModuleEndpointExtensions
         }
         return group.WithMetadata(new ModuleMetadata(typeof(TModule), name));
     }
-
-    [GeneratedRegex("^[a-z](?:-?[a-z0-9])*$", RegexOptions.CultureInvariant)]
-    private static partial Regex NameRule();
 }
 
 /// <summary>The metadata <see cref="ModuleEndpointExtensions.BelongsTo{TModule}"/> places on a route.</summary>

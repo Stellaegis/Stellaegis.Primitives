@@ -17,12 +17,14 @@ public static class OperationEndpointExtensions
 
     /// <summary>
     /// Requires, on each route labelled with an <see cref="Operation"/>, the policy that
-    /// <paramref name="policyFor"/> names for it:
+    /// <paramref name="policyFor"/> names for it — usually the operation's identity, one policy per operation:
     /// <code>
     /// app.MapGroup("/api").MapDocumentsEndpoints()
-    ///    .RequireAuthorizationPerOperation(op => op.Kind == OperationKind.Read ? "reader" : "writer");
+    ///    .RequireAuthorizationPerOperation(op => op.ToString());
     /// </code>
-    /// A route without an operation is left to the host's fallback policy, if it sets one.
+    /// An application without rights of its own may choose by kind instead, a coarse fallback:
+    /// <c>op => op.Kind == OperationKind.Read ? "reader" : "writer"</c>. A route without an operation is left to the
+    /// host's fallback policy, if it sets one.
     /// </summary>
     /// <remarks>
     /// A final convention: a group convention runs before a route has its own metadata, so only a final one

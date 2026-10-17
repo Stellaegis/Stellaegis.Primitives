@@ -85,11 +85,24 @@ public class OperationTests
     }
 
     [Fact]
-    public void An_operation_needs_a_module_a_name_and_a_known_kind()
+    public void An_operation_needs_a_target_a_name_and_a_known_kind()
     {
         Assert.Throws<ArgumentException>(() => new Operation(" ", "read", OperationKind.Read));
         Assert.Throws<ArgumentException>(() => new Operation("notes", "", OperationKind.Read));
         Assert.Throws<ArgumentException>(() => new Operation("notes", "read", (OperationKind)42));
+    }
+
+    [Fact]
+    public void Target_and_name_follow_the_slug_rule()
+    {
+        var operation = new Operation("fiscal-years", "close", OperationKind.Write);
+        Assert.Equal("fiscal-years", operation.Target);
+        Assert.Equal("fiscal-years.close", operation.ToString());
+
+        Assert.Throws<ArgumentException>(() => new Operation("Invoices", "validate", OperationKind.Write));
+        Assert.Throws<ArgumentException>(() => new Operation("invoices", "transfer--ownership", OperationKind.Write));
+        Assert.Throws<ArgumentException>(() => new Operation("invoices.lines", "read", OperationKind.Read));
+        Assert.Throws<ArgumentException>(() => new Operation("invoices", "read-", OperationKind.Read));
     }
 
     [Fact]

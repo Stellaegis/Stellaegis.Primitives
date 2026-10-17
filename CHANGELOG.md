@@ -23,6 +23,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Breaking:** `RequireRequestContext(acceptsSharedSpace = false)` no longer takes the module name: the
   module is declared by `BelongsTo<TModule>()`, which a module without compartments calls alone.
+- **Breaking:** `Operation(target, name, kind)` takes the type of data it acts on, `Target`, instead of the
+  module, `Module`: one module may act on several targets, `invoices` and `fiscal-years`. Its identity is
+  `target.name`, such as `invoices.validate`. Target and name follow the rule of module names — lowercase
+  letters, digits and single hyphens —, where any non-blank string was accepted.
+- The documentation presents a policy per operation, `op => op.ToString()`, as the usual way to secure a
+  module, and a policy per kind as a coarse fallback: the kind is a fact about the data, not a right.
+- The documentation of `Compartment` no longer offers a user as a compartment: a compartment isolates an
+  organization, and the records a user owns are a matter of ownership within it.
 
 - **Breaking:** the startup check fails when a route labelled with an `Operation` declares no authorization —
   neither a requirement (`RequireAuthorization`, `RequireAuthorizationPerOperation`, an `[Authorize]`
