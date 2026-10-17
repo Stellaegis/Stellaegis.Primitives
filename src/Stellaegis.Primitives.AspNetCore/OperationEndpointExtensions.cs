@@ -46,8 +46,9 @@ public static class OperationEndpointExtensions
     }
 
     /// <summary>
-    /// Declares that any user reaching these routes may access any resource they address: the module does not
-    /// ask the authorization on each resource. The equivalent, for data, of <c>[AllowAnonymous]</c>.
+    /// Declares that any user reaching these routes may access any resource they load: the module does not ask
+    /// the authorization on each resource. The equivalent, for data, of <c>[AllowAnonymous]</c> — or the
+    /// declaration of an application whose database already filters what a route loads, by row-level security.
     /// </summary>
     /// <remarks>
     /// Without it, a module asks the authorization on each resource it loads, and refuses unless a handler of

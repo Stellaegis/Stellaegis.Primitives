@@ -490,8 +490,9 @@ if (document is null || !await http.AuthorizeResourceAsync(document))
 
 The application answers with an ordinary handler — `AuthorizationHandler<Operation, Document>` — and a
 refusal is answered as an absence. Refusal is the default: without a handler, nothing is accessible. An
-application that lets any user reaching the routes access any resource declares it, as it would declare
-`[AllowAnonymous]`:
+application that lets any user reaching the routes access any resource they load declares it, as it would
+declare `[AllowAnonymous]` — so does an application whose database already filters what a route loads, by
+row-level security:
 
 ```csharp
 app.MapGroup("/api").MapDocumentsEndpoints().RequireAuthorization().AllowAnyResource();
