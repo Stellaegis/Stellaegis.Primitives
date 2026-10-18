@@ -1,9 +1,14 @@
 # Stellaegis.Primitives
 
 Stellaegis.Primitives is a small set of .NET building blocks shared by the Stellaegis modules:
-operation results, argument guards, events, and a unit of work over ADO.NET. Each Stellaegis module is
-a library published on its own. These primitives are the part they have in common, so that a module
-does not carry its own copy of them.
+operation results, argument guards, events, a unit of work over ADO.NET, and the declarations that let
+every module of an application isolate its data the same way. Each Stellaegis module is a library
+published on its own. These primitives are the part they have in common, so that a module does not
+carry its own copy of them.
+
+The same primitives serve applications of very different shapes, from a desktop application without a
+network to a multi-tenant SaaS, through a web application serving a single organization. An application
+declares its shape once, in its frame, and each module reads it there instead of being configured for it.
 
 You can use them without any other Stellaegis package. They know nothing of tenants or of a message
 bus: those are decisions of the application that hosts them. HTTP is confined to a package of its own,
@@ -271,6 +276,19 @@ work; the tests prove it against real engines. Npgsql can be told not to reset, 
 user's identity to the next. Under SQL Server, the read-only context cannot be changed inside the unit
 of work, and Microsoft.Data.SqlClient offers no way to skip the reset.
 
+The session context is as trustworthy as the program that sets it. Set by a server, it states who the
+server authenticated. Set by a program running on a user's own machine, connected to the database
+directly, it is declared by the very user it names, and that user can connect with the same credentials
+and set another. A row-level security policy then guards against a forgotten filter, not against the
+user. A database reached directly identifies its user by what the engine itself authenticated, such as
+`ORIGINAL_LOGIN()` or `SUSER_SID()` under SQL Server.
+
+⚠ An external connection pooler in transaction mode, such as PgBouncer configured that way, breaks the
+session context. It hands the server connection to another client after each transaction, and after
+each statement outside one: the next statement may run without the context, or with the one another
+user left. This package cannot detect it. A pooler in session mode is safe. Some hosting providers offer
+transaction mode by default, so check the mode before relying on the context.
+
 `IUnitOfWorkFactory<TDatabase>` stays, without a space, for code that has none: a database of its own,
 with no compartment.
 
@@ -394,11 +412,100 @@ without compartments:
 var group = routes.MapGroup("/rendering").BelongsTo<RenderingModule>();
 ```
 
-Every route labelled with an `Operation` belongs to a module, and the startup check fails on one that does
-not; an application labelling routes of its own declares a module of its own. Two module types carrying the
-same name fail the startup too. `BelongsTo` fails when the startup check is not registered: a module without
-compartments registers it from its own registration with `AddStellaegisStartupCheck()`, and
+Every route labelled with an `Operation` belongs to a module, and every module on the routes is declared
+to the application with `AddStellaegisModule`, as the next section describes: the startup check fails on a
+route without a module, and on a module the registrations do not declare. An application labelling routes
+of its own declares a module of its own, the same way. Two module types carrying the same name fail the
+startup too. `BelongsTo` fails when the startup check is not registered: a module without compartments
+registers it from its own registration with `AddStellaegisStartupCheck()`, and
 `AddStellaegisRequestContext` registers it for the others.
+
+## The application frame
+
+An application declares once what is true of its isolation, whatever the host that serves it: how many
+compartments it has, whether it has a shared space, whether each user sees only the data they own, and
+the actor recorded for a request without an authenticated user. This declaration is an `ApplicationFrame`,
+in `Stellaegis.Primitives`, and it needs no ASP.NET Core.
+
+```csharp
+public static class AppFrame
+{
+    public static readonly Compartment Owner = Compartment.Parse("acme");
+
+    public static readonly ApplicationFrame Value = ApplicationFrame
+        .SingleCompartment(Owner)     // or WithoutCompartments, or ManyCompartments()
+        .WithOwnerIsolation();        // each user sees only the data they own
+}
+```
+
+Write the frame in code that every host of the application shares — a web API, a scheduled worker, a
+command-line tool — rather than in configuration. A configuration can differ from one host to another, and
+a host forgotten when the application takes a second compartment would keep serving everyone in the first,
+without an error. A constant cannot differ. The cost is a rebuild to change it, which matches how rarely it
+changes: taking a second compartment is a change of the application, not of a deployment.
+
+The frame takes one of three forms:
+
+- `WithoutCompartments`: the application isolates nothing and uses no module with compartments. Its code
+  never sees a `Space`. An application that registers no frame is in this form.
+- `SingleCompartment(Owner)`: one compartment, named after the organization that owns the data, never a
+  placeholder such as `main`. The day the application manages a second organization, the first keeps its
+  name, and nothing is migrated. Its URLs carry no compartment segment, and its work outside requests — a
+  scheduled task, an import — passes the same constant, `AppFrame.Owner`, to the modules.
+- `ManyCompartments()`: each request names its compartment. Where a request reads it is the request
+  context's to say.
+
+A shared space and an isolation by owner are absent unless declared, with `WithSharedSpace()` and
+`WithOwnerIsolation()`; both require compartments. `WithAnonymousActor("guest")` replaces the label
+`anonymous`. A frame is immutable: each of these methods returns a new one.
+
+### What a module declares
+
+Each module declares, from its own registration, whether it has compartments. The statement is always
+explicit, with no default: a module with compartments that said nothing would escape every check the frame
+makes.
+
+```csharp
+services.AddStellaegisModule(ModuleDeclaration.Compartmented<DocumentsModule>());           // the module
+services.AddStellaegisModuleCapability<DocumentsModule>(ModuleCapability.OwnerIsolation);   // its PostgreSQL adapter
+```
+
+A module also declares its **capabilities**: what it can do. Some depend on the database rather than on the
+module. An isolation by owner is a row-level security rule written for one engine, so the adapter for that
+engine declares it, and an adapter for another engine may not. A module may offer capabilities the
+application chooses to turn on, its **parameters**, with
+`AddStellaegisModuleParameter<TModule>(capability)`; the module documents the ones it publishes.
+
+These registrations, and `AddStellaegisFrame(AppFrame.Value)` for the frame, come from
+`Stellaegis.Primitives.DependencyInjection`.
+
+### The confrontation
+
+At startup, the frame is read against the declaration of every module. The application fails to start,
+naming each module at fault and what to change, when:
+
+- a module with compartments is used by an application without any;
+- the frame declares an isolation by owner, and a module with compartments cannot hold it with the adapter
+  registered;
+- a parameter is turned on that the module has no capability for;
+- a module is declared twice, two module types carry the same name, or a capability or a parameter is
+  given to a module nothing declares.
+
+An ASP.NET Core host runs the confrontation by itself, with the startup check of its routes. An
+application without ASP.NET Core — a desktop application, a worker — calls it once, after building its
+services and before anything runs:
+
+```csharp
+var services = new ServiceCollection()
+    .AddStellaegisFrame(AppFrame.Value)
+    // the modules' registrations
+    .BuildServiceProvider();
+services.ConfrontStellaegisModules();
+```
+
+⚠ The confrontation reads declarations, not the database. A module whose adapter declares an isolation by
+owner is trusted to have its rule installed; checking the database itself at startup is not part of this
+release.
 
 ## The request context of an HTTP module
 
@@ -407,36 +514,32 @@ or the shared space — and the actor performing it. Where the compartment and t
 application's decision: a route segment, a claim, a subdomain, a constant. The module reads them through a
 port, `IRequestContext`. The application registers the source it is read from.
 
+How many compartments there are is the frame's to say. With a single compartment, every request addresses
+it, and the request context declares no compartment source:
+
 ```csharp
-builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment("acme"));
+builder.Services.AddStellaegisFrame(AppFrame.Value);   // ApplicationFrame.SingleCompartment(...)
+builder.Services.AddStellaegisRequestContext();
 ```
 
-An application with a single compartment names it after the organization that owns the data, never a
-placeholder such as `main`: the day it manages a second organization, the first keeps its name, and nothing
-is migrated. It declares that compartment once, as a constant, which its work outside requests — a
-scheduled task, an import — passes to the modules too:
+With many, the request context declares exactly one compartment source — `CompartmentFromRoute`,
+`CompartmentFromClaim`, or `CompartmentFrom` with a function of the `HttpContext` — and, in either form, an
+optional actor source, `ActorFromClaim` or `ActorFrom`:
 
 ```csharp
-public static class Tenant
-{
-    public static readonly Compartment Owner = Compartment.Parse("acme");
-}
-
-builder.Services.AddStellaegisRequestContext(c => c.SingleCompartment(Tenant.Owner));
-```
-
-The configurable source takes one compartment source — `SingleCompartment`, `CompartmentFromRoute`,
-`CompartmentFromClaim` or `CompartmentFrom` with a function of the `HttpContext` — and an optional actor
-source, `ActorFromClaim` or `ActorFrom`. Declaring no compartment source, or two, fails at registration.
-
-```csharp
+builder.Services.AddStellaegisFrame(ApplicationFrame.ManyCompartments());
 builder.Services.AddStellaegisRequestContext(c => c
     .CompartmentFromRoute("org")      // /api/orgs/{org}/...
     .ActorFromClaim("oid"));          // the Microsoft Entra object id
 ```
 
+Declaring two compartment sources fails at registration. A declaration that disagrees with the frame — a
+compartment source with a single compartment, none with many, a request context in an application without
+compartments — fails at startup.
+
 An application with a resolution of its own, such as a tenant middleware, implements
-`IRequestContextSource` and registers it instead. Both are registered per request.
+`IRequestContextSource` and registers it instead. With a single compartment, the frame gives the
+compartment, and the source only the actor. Both are registered per request.
 
 ```csharp
 sealed class TenantSource(ITenantAccessor tenants, IUserAccessor users) : IRequestContextSource
@@ -453,7 +556,7 @@ instance — and a module's endpoint then answers 404. There is no fallback comp
 wants one names it explicitly.
 
 The actor is always present. By default it is read from the `NameIdentifier` claim, then `sub`, and it
-is `anonymous` when no user is authenticated; `AnonymousActor` changes that label. A module never
+is `anonymous` when no user is authenticated; the frame's `WithAnonymousActor` changes that label. A module never
 refuses a request for lack of an actor: whether a request needs an authenticated user is decided by the
 security the application attaches to the routes. An authenticated user without the claim, or with a
 value that is not a valid `Actor`, fails the request: the claim chosen is the wrong one, and recording
@@ -461,8 +564,8 @@ the request as anonymous would attribute it to nobody.
 
 ### The shared space
 
-A module that holds data belonging to no compartment serves it in the shared space. The application
-chooses the routes that reach it, by marking a group:
+A module that holds data belonging to no compartment serves it in the shared space, which the frame
+declares with `WithSharedSpace()`. The application chooses the routes that reach it, by marking a group:
 
 ```csharp
 app.MapGroup("/api/orgs/{org}").MapDocumentsEndpoints().RequireAuthorization("member");
@@ -471,7 +574,8 @@ app.MapGroup("/api/shared").MapDocumentsEndpoints().InSharedSpace().RequireAutho
 
 On a marked route the space is `Space.Shared`, and the source's compartment is not read. A source knows
 nothing of the shared space and cannot produce it: the mark is the only way in. A group mapped without the
-mark reads the compartment as usual, and answers 404 where there is none.
+mark reads the compartment as usual, and answers 404 where there is none. Marking a route in an application
+whose frame has no shared space fails the startup.
 
 A module mapped twice cannot name its routes: ASP.NET Core requires endpoint names unique across the host,
 and fails every request on a duplicate. The startup check fails first, naming the routes.
@@ -535,6 +639,7 @@ Administration is not a kind: it is an audience, and a module maps its administr
 | Which module a route belongs to | the module | `BelongsTo<TModule>()` |
 | Who may call a route | the application | `.RequireAuthorization(...)`, a policy per operation, or `.AllowAnonymous()` — one of them, always |
 | Who may access a resource the route loads | the application | an authorization handler on the resource, or `.AllowAnyResource()` |
+| That a route loads no resource | the module | `.LoadsNoResource()` |
 
 ### A policy per operation
 
@@ -575,6 +680,11 @@ row-level security:
 app.MapGroup("/api").MapDocumentsEndpoints().RequireAuthorization().AllowAnyResource();
 ```
 
+A route that loads no resource — a purge acting on a whole compartment, for instance — has nothing to ask
+about. Its module declares it with `LoadsNoResource()`, and the application then needs neither a handler
+nor `AllowAnyResource()` for that route. Who may call the route stays the application's decision, as on
+any other, and `AuthorizeResourceAsync` fails on it.
+
 ⚠ The startup check reads the routes, not the database. When `AllowAnyResource()` relies on row-level
 security, the rule must be installed in the database: without it, every user reaching the routes accesses
 every resource, and nothing fails.
@@ -582,15 +692,24 @@ every resource, and nothing fails.
 ### Checked at startup
 
 `AddStellaegisStartupCheck()`, which registering a request context calls too, registers a startup check
-of the routes. The application fails to start, with a message naming the routes and the way out, when:
+of the frame and the routes. The application fails to start, with a message naming the modules or the
+routes and the way out, when:
 
+- the frame and the modules' declarations do not hold together — the confrontation of
+  *The application frame*;
+- a request context is registered in an application without compartments, declares a compartment source
+  with a single compartment, or none with many;
+- a route belongs to a module nothing declares, or reads the request context while its module is declared
+  without compartments;
+- a route is marked `InSharedSpace()` in an application whose frame has no shared space, or has no
+  declaration accepting the shared space;
 - two routes share a name — ASP.NET Core would fail every request;
 - two module types carry the same name;
-- a route marked `InSharedSpace()` has no declaration accepting the shared space;
 - a route labelled with an operation belongs to no module;
 - it declares no authorization — neither a requirement nor `AllowAnonymous()`, a fallback policy not
   counting;
-- it has neither an authorization handler for operations nor `AllowAnyResource()`;
+- it has neither an authorization handler for operations nor `AllowAnyResource()`, and does not declare
+  that it loads no resource;
 - a policy it requires is not registered.
 
 Handler detection resolves the registered handlers, so a handler registered by a factory is seen. It

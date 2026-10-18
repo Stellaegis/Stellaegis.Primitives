@@ -7,6 +7,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+An application declares its frame once — its compartments, its shared space, its isolation by owner — and every
+module declares what it is and what it can hold; the two are confronted at startup, with or without ASP.NET Core.
+Operations write their names with underscores, and module names with letters and digits only. The four packages
+move together to 4.0.0.
+
+### Migrating from 3.x
+
+- `AddStellaegisRequestContext(c => c.SingleCompartment("acme"))` becomes
+  `AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme"))` followed by `AddStellaegisRequestContext()`.
+- `CompartmentFromRoute`, `CompartmentFromClaim` and `CompartmentFrom` stay on the request context, with
+  `AddStellaegisFrame(ApplicationFrame.ManyCompartments())`; add `.WithSharedSpace()` to the frame if routes are
+  marked `InSharedSpace()`.
+- `AnonymousActor("guest")` becomes the frame's `WithAnonymousActor("guest")`.
+- An operation named with a hyphen, `new Operation("fiscal-years", ...)`, takes an underscore,
+  `new Operation("fiscal_years", ...)`; a module named with a hyphen takes letters and digits only.
+- Each module with routes declares itself, `AddStellaegisModule(ModuleDeclaration.Compartmented<TModule>())` or
+  `ModuleDeclaration.WithoutCompartments<TModule>()`, usually from its own registration; an application declares
+  its own modules the same way.
+- A module's route that loads no resource, such as a purge, may declare `LoadsNoResource()` instead of asking the
+  host for `AllowAnyResource()`.
+
 ### Added
 
 - `ApplicationFrame`: what is true of an application's isolation, declared once in code the hosts share — no
