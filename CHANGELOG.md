@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `ApplicationFrame`: what is true of an application's isolation, declared once in code the hosts share — no
+  compartments, a single compartment or many; a shared space, absent unless declared; an isolation by owner; the
+  actor recorded for a request without an authenticated user. Without ASP.NET (`Stellaegis.Primitives`).
+
 ### Changed
 
 - **Breaking.** An operation's target and name follow the grammar of table names, which permission codes follow
