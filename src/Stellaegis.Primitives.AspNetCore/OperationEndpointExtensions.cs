@@ -60,6 +60,35 @@ public static class OperationEndpointExtensions
         ArgumentNullException.ThrowIfNull(builder);
         return builder.WithMetadata(AllowAnyResourceMetadata.Instance);
     }
+
+    /// <summary>
+    /// Declares that these routes load no resource — a purge acting on a compartment, a rendering of the request's
+    /// own content: there is nothing to ask the authorization on. A module declares it on such a route, and the
+    /// startup check requires of it neither a handler for the resources nor <c>AllowAnyResource</c>.
+    /// <code>
+    /// admin.MapDelete("/compartments/{compartment}", ...).WithMetadata(Purge).LoadsNoResource();
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// The route itself stays closed until the application declares its authorization: this concerns the data, not
+    /// who may call. <c>AuthorizeResourceAsync</c> fails on such a route, which declared it would not ask.
+    /// </remarks>
+    public static TBuilder LoadsNoResource<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.WithMetadata(LoadsNoResourceMetadata.Instance);
+    }
+}
+
+/// <summary>The metadata <see cref="OperationEndpointExtensions.LoadsNoResource{TBuilder}"/> places on a route.</summary>
+internal sealed class LoadsNoResourceMetadata
+{
+    public static readonly LoadsNoResourceMetadata Instance = new();
+
+    private LoadsNoResourceMetadata()
+    {
+    }
 }
 
 /// <summary>The metadata <see cref="OperationEndpointExtensions.AllowAnyResource{TBuilder}"/> places on a route.</summary>

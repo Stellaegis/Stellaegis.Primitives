@@ -21,7 +21,9 @@ public static class ResourceAuthorizationExtensions
     /// handler of the consumer — an <c>AuthorizationHandler&lt;Operation, TResource&gt;</c> — must succeed, and
     /// refusal is the default.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">The route is not labelled with an <see cref="Operation"/>.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The route is not labelled with an <see cref="Operation"/>, or declares it loads no resource.
+    /// </exception>
     public static async Task<bool> AuthorizeResourceAsync(this HttpContext httpContext, object resource)
     {
         Guard.NotNull(httpContext);
@@ -32,7 +34,13 @@ public static class ResourceAuthorizationExtensions
             ?? throw new InvalidOperationException(
                 $"The route {endpoint?.DisplayName ?? httpContext.Request.Path} asks the authorization on a resource "
                 + "without being labelled with an Operation.");
-        if (endpoint!.Metadata.GetMetadata<AllowAnyResourceMetadata>() is not null)
+        if (endpoint!.Metadata.GetMetadata<LoadsNoResourceMetadata>() is not null)
+        {
+            throw new InvalidOperationException(
+                $"The route {endpoint.DisplayName} asks the authorization on a resource, and declares it loads none "
+                + "(LoadsNoResource). Remove the declaration, or the question.");
+        }
+        if (endpoint.Metadata.GetMetadata<AllowAnyResourceMetadata>() is not null)
             return true;
 
         var authorization = httpContext.RequestServices.GetRequiredService<IAuthorizationService>();

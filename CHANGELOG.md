@@ -24,6 +24,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   injection, with or without ASP.NET Core: `AddStellaegisFrame`, `AddStellaegisModule`,
   `AddStellaegisModuleCapability<TModule>` for an adapter, `AddStellaegisModuleParameter<TModule>` for the
   application, and `ConfrontStellaegisModules()`, which an application without ASP.NET Core calls once at startup.
+- `LoadsNoResource()`: a module declares that a route loads no resource — a purge acting on a compartment. The
+  startup check requires of it neither a handler for the resources nor `AllowAnyResource()`, which a host without
+  handlers had to declare on its administration mapping to start; its authorization stays required, and
+  `AuthorizeResourceAsync` fails on it (`Stellaegis.Primitives.AspNetCore`).
 
 ### Changed
 

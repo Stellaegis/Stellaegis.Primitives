@@ -235,7 +235,8 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         }
 
         var closed = endpoints
-            .Where(endpoint => endpoint.Metadata.GetMetadata<AllowAnyResourceMetadata>() is null)
+            .Where(endpoint => endpoint.Metadata.GetMetadata<AllowAnyResourceMetadata>() is null
+                && endpoint.Metadata.GetMetadata<LoadsNoResourceMetadata>() is null)
             .ToList();
         if (closed.Count > 0 && !AnyOperationHandler(services))
         {

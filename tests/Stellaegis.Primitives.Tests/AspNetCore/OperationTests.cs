@@ -206,6 +206,53 @@ public class OperationTests
         Assert.Equal("john-1", await app.GetTestClient().GetStringAsync("/notes/john-1", Ct));
     }
 
+    private static readonly Operation Purge = new("notes", "purge", OperationKind.Delete);
+
+    // The shape of UC-07: the main mapping allows any resource, the database isolating them; the administration
+    // mapping holds a purge, which loads nothing, and the host registers no handler for the resources.
+    [Fact]
+    public async Task A_route_loading_no_resource_needs_neither_a_handler_nor_an_open_declaration()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddNotes().AddAuthorization(),
+            routes =>
+            {
+                routes.MapNotesEndpoints().RequireAuthorization().AllowAnyResource();
+                routes.MapGroup("/admin/notes").BelongsTo<NotesModule>().RequireRequestContext()
+                    .MapDelete("/compartments/{compartment}", () => "purged").WithMetadata(Purge).LoadsNoResource()
+                    .AllowAnonymous();
+            });
+
+        var response = await app.GetTestClient().DeleteAsync("/admin/notes/compartments/acme", Ct);
+        Assert.Equal("purged", await response.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_route_loading_no_resource_still_declares_its_authorization()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddNotes().AddAuthorization(),
+            routes => routes.MapGroup("/admin/notes").BelongsTo<NotesModule>().RequireRequestContext()
+                .MapDelete("/compartments/{compartment}", () => "purged").WithMetadata(Purge).LoadsNoResource()));
+
+        Assert.Contains("notes.purge", exception.Message);
+        Assert.Contains("declare no authorization", exception.Message);
+    }
+
+    [Fact]
+    public async Task Asking_on_a_route_loading_no_resource_fails()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddNotes().AddAuthorization(),
+            routes => routes.MapGroup("/admin/notes").BelongsTo<NotesModule>().RequireRequestContext()
+                .MapDelete("/compartments/{compartment}", async (HttpContext http) => await http.AuthorizeResourceAsync("anything"))
+                .WithMetadata(Purge).LoadsNoResource().AllowAnonymous());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            app.GetTestClient().DeleteAsync("/admin/notes/compartments/acme", Ct));
+        Assert.Contains("LoadsNoResource", exception.Message);
+    }
+
     [Fact]
     public async Task Neither_a_handler_nor_an_open_declaration_fails_the_startup()
     {
