@@ -29,14 +29,34 @@ public class ModuleTests
         public static string Name => "Rendering";
     }
 
-    private sealed class TrailingHyphenModule : IStellaegisModule
+    private sealed class HyphenModule : IStellaegisModule
     {
-        public static string Name => "rendering-";
+        public static string Name => "html-pdf";
     }
 
-    private sealed class DoubleHyphenModule : IStellaegisModule
+    private sealed class UnderscoreModule : IStellaegisModule
     {
-        public static string Name => "html--pdf";
+        public static string Name => "html_pdf";
+    }
+
+    private sealed class ShortModule : IStellaegisModule
+    {
+        public static string Name => "ab";
+    }
+
+    private sealed class DigitFirstModule : IStellaegisModule
+    {
+        public static string Name => "2fa";
+    }
+
+    private sealed class LongModule : IStellaegisModule
+    {
+        public static string Name => new('a', 64);
+    }
+
+    private sealed class LongestModule : IStellaegisModule
+    {
+        public static string Name => "a" + new string('1', 62);
     }
 
     private sealed class EmptyModule : IStellaegisModule
@@ -136,9 +156,18 @@ public class ModuleTests
     [Fact]
     public async Task A_module_name_follows_the_rule()
     {
+        await using (await TestApp.StartAsync(
+            services => services.AddStellaegisStartupCheck(),
+            routes => routes.MapGroup("/m").BelongsTo<LongestModule>()))
+        {
+        }
+
         await AssertRefusedAsync<UppercaseModule>();
-        await AssertRefusedAsync<TrailingHyphenModule>();
-        await AssertRefusedAsync<DoubleHyphenModule>();
+        await AssertRefusedAsync<HyphenModule>();
+        await AssertRefusedAsync<UnderscoreModule>();
+        await AssertRefusedAsync<ShortModule>();
+        await AssertRefusedAsync<DigitFirstModule>();
+        await AssertRefusedAsync<LongModule>();
         await AssertRefusedAsync<EmptyModule>();
 
         static async Task AssertRefusedAsync<TModule>() where TModule : IStellaegisModule

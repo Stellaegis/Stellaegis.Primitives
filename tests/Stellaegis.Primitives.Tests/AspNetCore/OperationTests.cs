@@ -93,16 +93,25 @@ public class OperationTests
     }
 
     [Fact]
-    public void Target_and_name_follow_the_slug_rule()
+    public void Target_and_name_follow_the_grammar_of_table_names()
     {
-        var operation = new Operation("fiscal-years", "close", OperationKind.Write);
-        Assert.Equal("fiscal-years", operation.Target);
-        Assert.Equal("fiscal-years.close", operation.ToString());
+        var operation = new Operation("fiscal_years", "close", OperationKind.Write);
+        Assert.Equal("fiscal_years", operation.Target);
+        Assert.Equal("fiscal_years.close", operation.ToString());
+        Assert.Equal("members.transfer_ownership", new Operation("members", "transfer_ownership", OperationKind.Write).ToString());
+        Assert.Equal("a.b", new Operation("a", "b", OperationKind.Read).ToString());
+        Assert.Equal(new string('a', 63), new Operation(new string('a', 63), "read", OperationKind.Read).Target);
 
         Assert.Throws<ArgumentException>(() => new Operation("Invoices", "validate", OperationKind.Write));
-        Assert.Throws<ArgumentException>(() => new Operation("invoices", "transfer--ownership", OperationKind.Write));
+        Assert.Throws<ArgumentException>(() => new Operation("fiscal-years", "close", OperationKind.Write));
+        Assert.Throws<ArgumentException>(() => new Operation("documents", "replace-content", OperationKind.Write));
+        Assert.Throws<ArgumentException>(() => new Operation("invoices", "transfer__ownership", OperationKind.Write));
+        Assert.Throws<ArgumentException>(() => new Operation("_invoices", "read", OperationKind.Read));
+        Assert.Throws<ArgumentException>(() => new Operation("invoices", "read_", OperationKind.Read));
+        Assert.Throws<ArgumentException>(() => new Operation("1invoices", "read", OperationKind.Read));
         Assert.Throws<ArgumentException>(() => new Operation("invoices.lines", "read", OperationKind.Read));
-        Assert.Throws<ArgumentException>(() => new Operation("invoices", "read-", OperationKind.Read));
+        Assert.Throws<ArgumentException>(() => new Operation("invoices", "read\n", OperationKind.Read));
+        Assert.Throws<ArgumentException>(() => new Operation(new string('a', 64), "read", OperationKind.Read));
     }
 
     [Fact]

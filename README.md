@@ -381,8 +381,9 @@ public sealed class DocumentsModule : IStellaegisModule
 }
 ```
 
-The name is 1 to 63 lowercase letters, digits and single hyphens, starting with a letter and ending with a
-letter or a digit. `IStellaegisModule` lives in `Stellaegis.Primitives`: a module without endpoints declares
+The name is 3 to 63 lowercase letters and digits, starting with a letter — neither a hyphen nor an underscore:
+it may become, unchanged, the API code of a host serving only this module, which is also an OAuth scope and
+audience, a URL segment or a configuration key. `IStellaegisModule` lives in `Stellaegis.Primitives`: a module without endpoints declares
 its identity the same way.
 
 A module that exposes endpoints declares that its routes belong to it, on the group it maps onto — with or
@@ -521,7 +522,9 @@ An operation carries two things, and grants neither:
 | Its kind | what it does to the data, declared rather than deduced from the HTTP verb | `Write` |
 
 The target is a type of data, never an instance: one module may act on several targets, `invoices` and
-`fiscal-years`. Target and name follow the rule of module names. The kind — `Read`, `Write` or `Delete` —
+`fiscal_years`. Target and name follow the grammar of table names, which permission codes follow too: 1 to 63
+lowercase letters, digits and single underscores, starting with a letter and ending with a letter or a digit. A
+hyphen is refused, never converted. The kind — `Read`, `Write` or `Delete` —
 is a fact about the data, read for audit or to refuse writes during a maintenance as much as for security.
 Administration is not a kind: it is an audience, and a module maps its administration routes separately.
 

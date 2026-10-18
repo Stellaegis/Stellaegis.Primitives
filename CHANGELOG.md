@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking.** An operation's target and name follow the grammar of table names, which permission codes follow
+  too: 1 to 63 lowercase letters, digits and single underscores, starting with a letter and ending with a letter or
+  a digit. A hyphen is refused, never converted: `fiscal-years` becomes `fiscal_years`, `replace-content` becomes
+  `replace_content` (`Stellaegis.Primitives.AspNetCore`).
+- **Breaking.** A module name is 3 to 63 lowercase letters and digits, starting with a letter, without a hyphen or
+  an underscore: it may become, unchanged, the API code of a host serving only this module — an OAuth scope and
+  audience —, a URL segment or a configuration key. `BelongsTo<TModule>()` refuses any other name.
+
 ### Fixed
 
 - The exception of `RequireRequestContext` without a registered request context suggested

@@ -46,14 +46,15 @@ public sealed class Operation : IAuthorizationRequirement, IEquatable<Operation>
 {
     /// <summary>
     /// Creates an operation on <paramref name="target"/>, such as <c>new("invoices", "validate", OperationKind.Write)</c>.
-    /// Target and name are 1 to 63 lowercase letters, digits and single hyphens, starting with a letter and ending
-    /// with a letter or a digit.
+    /// Target and name are 1 to 63 lowercase letters, digits and single underscores, starting with a letter and
+    /// ending with a letter or a digit — the grammar of table names: <c>fiscal_years.close</c>. A hyphen is
+    /// refused, never converted.
     /// </summary>
     /// <exception cref="ArgumentException">The target or the name breaks the rule, or the kind is unknown.</exception>
     public Operation(string target, string name, OperationKind kind)
     {
-        Target = Guard.Satisfies(target, Slug.IsValid, $"'{target}' is not a valid operation target: {Slug.Rule}.");
-        Name = Guard.Satisfies(name, Slug.IsValid, $"'{name}' is not a valid operation name: {Slug.Rule}.");
+        Target = Guard.Satisfies(target, NameRules.IsValidOperationPart, $"'{target}' is not a valid operation target: {NameRules.OperationPartRule}.");
+        Name = Guard.Satisfies(name, NameRules.IsValidOperationPart, $"'{name}' is not a valid operation name: {NameRules.OperationPartRule}.");
         Kind = Guard.Satisfies(kind, Enum.IsDefined, "Unknown operation kind.");
     }
 

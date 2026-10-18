@@ -30,10 +30,10 @@ public static class ModuleEndpointExtensions
     {
         Guard.NotNull(group);
         var name = TModule.Name;
-        if (!Slug.IsValid(name))
+        if (!NameRules.IsValidModule(name))
         {
             throw new ArgumentException(
-                $"'{name}', the name of {typeof(TModule).Name}, is not a valid module name: {Slug.Rule}.",
+                $"'{name}', the name of {typeof(TModule).Name}, is not a valid module name: {NameRules.ModuleRule}.",
                 nameof(TModule));
         }
 

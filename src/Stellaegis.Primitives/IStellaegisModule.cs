@@ -13,8 +13,10 @@ namespace Stellaegis.Primitives;
 public interface IStellaegisModule
 {
     /// <summary>
-    /// The module name, such as <c>documents</c>: 1 to 63 lowercase letters, digits and single hyphens, starting
-    /// with a letter and ending with a letter or a digit. Checked where the type is first used.
+    /// The module name, such as <c>documents</c>: 3 to 63 lowercase letters and digits, starting with a letter.
+    /// Neither a hyphen nor an underscore: the name may become, unchanged, the API code of a host serving only
+    /// this module — an OAuth scope and audience —, a URL segment or a configuration key. Checked where the type
+    /// is first used.
     /// </summary>
     static abstract string Name { get; }
 }
