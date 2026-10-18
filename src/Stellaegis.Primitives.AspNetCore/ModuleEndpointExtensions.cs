@@ -29,13 +29,7 @@ public static class ModuleEndpointExtensions
         where TModule : IStellaegisModule
     {
         Guard.NotNull(group);
-        var name = TModule.Name;
-        if (!NameRules.IsValidModule(name))
-        {
-            throw new ArgumentException(
-                $"'{name}', the name of {typeof(TModule).Name}, is not a valid module name: {NameRules.ModuleRule}.",
-                nameof(TModule));
-        }
+        var name = NameRules.ModuleNameOf<TModule>();
 
         IEndpointRouteBuilder routes = group;
         if (routes.ServiceProvider.GetService<IServiceProviderIsService>() is { } services

@@ -12,6 +12,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ApplicationFrame`: what is true of an application's isolation, declared once in code the hosts share — no
   compartments, a single compartment or many; a shared space, absent unless declared; an isolation by owner; the
   actor recorded for a request without an authenticated user. Without ASP.NET (`Stellaegis.Primitives`).
+- `ModuleDeclaration` and `ModuleCapability`: what a module declares to the application that assembles it —
+  whether it has compartments, always explicit; its capabilities, from the module or from its adapter, such as
+  `ModuleCapability.OwnerIsolation`; the parameters the assembly turns on among them.
+- `ApplicationFrame.Confront(...)`: reads the frame against the modules' declarations, and fails naming every
+  module at fault — a module with compartments in an application without any, a module that cannot hold the
+  isolation by owner the frame declares, a parameter outside a module's capabilities, a module declared twice or
+  two modules of the same name.
+- `NameRules`: the identifier rule and the module name rule, public so that every package reads the same ones.
 
 ### Changed
 

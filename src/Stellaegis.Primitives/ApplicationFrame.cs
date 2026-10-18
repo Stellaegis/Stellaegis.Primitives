@@ -133,6 +133,66 @@ public sealed class ApplicationFrame
     /// <exception cref="FormatException"><paramref name="actor"/> is not a valid actor.</exception>
     public ApplicationFrame WithAnonymousActor(string actor) => WithAnonymousActor(Actor.Parse(Guard.NotNull(actor)));
 
+    /// <summary>
+    /// Reads the frame against what each module of the assembly declares, and fails when they do not hold
+    /// together, naming every module at fault and what to change. Called once, at startup, before anything is
+    /// served — by the host's registration, or explicitly by an application without one:
+    /// <code>
+    /// AppFrame.Value.Confront([documents, messaging]);
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// Refused: a module declared twice, or two module types carrying the same name; a module with compartments
+    /// in an application without any; a module with compartments that cannot hold the isolation by owner the
+    /// frame declares; a parameter outside the module's capabilities. The guarantee stays the refusal at run time;
+    /// the confrontation turns it into a message, before the first user meets it.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="modules"/>, or one of them, is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The frame and the modules do not hold together.</exception>
+    public void Confront(IEnumerable<ModuleDeclaration> modules)
+    {
+        var declared = Guard.NotNull(modules).Select(module => Guard.NotNull(module)).ToList();
+        var faults = new List<string>();
+
+        faults.AddRange(declared
+            .GroupBy(module => module.Module)
+            .Where(group => group.Count() > 1)
+            .Select(group => $"{group.Key.Name} is declared {group.Count()} times: a module declares itself once"));
+        faults.AddRange(declared
+            .DistinctBy(module => module.Module)
+            .GroupBy(module => module.Name, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => $"'{group.Key}' is the name of {string.Join(" and ", group.Select(module => module.Module.FullName))}: "
+                + "a module name identifies one module"));
+
+        foreach (var module in declared.DistinctBy(module => module.Module))
+        {
+            if (module.IsCompartmented && Compartments == CompartmentCount.None)
+            {
+                faults.Add($"{module.Name} has compartments, and the application has none: declare its compartment, "
+                    + "ApplicationFrame.SingleCompartment(\"acme\"), named after the organization that owns the data");
+            }
+            else if (module.IsCompartmented && OwnerIsolation && !module.Capabilities.Contains(ModuleCapability.OwnerIsolation))
+            {
+                faults.Add($"{module.Name} cannot hold the isolation by owner the application declares: register an "
+                    + "adapter of the module that holds it, or remove WithOwnerIsolation() from the frame");
+            }
+
+            var outside = module.Parameters.Where(parameter => !module.Capabilities.Contains(parameter)).ToList();
+            if (outside.Count > 0)
+            {
+                faults.Add($"{module.Name} is given {Plural(outside.Count, "a parameter", "parameters")} it has no capability for: "
+                    + $"{string.Join(", ", outside)}");
+            }
+        }
+
+        if (faults.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"The modules do not hold with the application frame ({this}): {string.Join("; ", faults)}.");
+        }
+    }
+
     /// <summary>The frame as one line, for a startup message: <c>single compartment 'acme', owner isolation</c>.</summary>
     public override string ToString()
     {
@@ -153,6 +213,8 @@ public sealed class ApplicationFrame
             parts.Add($"anonymous actor '{AnonymousActor}'");
         return string.Join(", ", parts);
     }
+
+    private static string Plural(int count, string one, string many) => count == 1 ? one : many;
 
     // A shared space and an isolation by owner are both ways of placing data among compartments: without
     // compartments, there is nothing to place, and a module that reads either would need a space it never gets.

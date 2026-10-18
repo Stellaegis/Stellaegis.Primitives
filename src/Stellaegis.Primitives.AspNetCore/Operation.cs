@@ -53,8 +53,8 @@ public sealed class Operation : IAuthorizationRequirement, IEquatable<Operation>
     /// <exception cref="ArgumentException">The target or the name breaks the rule, or the kind is unknown.</exception>
     public Operation(string target, string name, OperationKind kind)
     {
-        Target = Guard.Satisfies(target, NameRules.IsValidOperationPart, $"'{target}' is not a valid operation target: {NameRules.OperationPartRule}.");
-        Name = Guard.Satisfies(name, NameRules.IsValidOperationPart, $"'{name}' is not a valid operation name: {NameRules.OperationPartRule}.");
+        Target = Guard.Satisfies(target, NameRules.IsIdentifier, $"'{target}' is not a valid operation target: {NameRules.IdentifierRule}.");
+        Name = Guard.Satisfies(name, NameRules.IsIdentifier, $"'{name}' is not a valid operation name: {NameRules.IdentifierRule}.");
         Kind = Guard.Satisfies(kind, Enum.IsDefined, "Unknown operation kind.");
     }
 
