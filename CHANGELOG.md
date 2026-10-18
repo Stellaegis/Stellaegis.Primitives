@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [4.0.0] — 2026-10-18
+
 An application declares its frame once — its compartments, its shared space, its isolation by owner — and every
 module declares what it is and what it can hold; the two are confronted at startup, with or without ASP.NET Core.
 Operations write their names with underscores, and module names with letters and digits only. The four packages
@@ -238,7 +240,8 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
-[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v1.0.0...v1.1.0
