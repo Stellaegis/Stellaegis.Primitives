@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Stellaegis.Primitives\Stellaegis.Primitives.csproj" />
     <ProjectReference Include="..\..\src\Stellaegis.Primitives.Data\Stellaegis.Primitives.Data.csproj" />
+    <ProjectReference Include="..\..\src\Stellaegis.Primitives.DependencyInjection\Stellaegis.Primitives.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\src\Stellaegis.Primitives.AspNetCore\Stellaegis.Primitives.AspNetCore.csproj" />
   </ItemGroup>
 

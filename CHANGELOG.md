@@ -20,6 +20,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   isolation by owner the frame declares, a parameter outside a module's capabilities, a module declared twice or
   two modules of the same name.
 - `NameRules`: the identifier rule and the module name rule, public so that every package reads the same ones.
+- A fourth package, `Stellaegis.Primitives.DependencyInjection`, for an application assembled by dependency
+  injection, with or without ASP.NET Core: `AddStellaegisFrame`, `AddStellaegisModule`,
+  `AddStellaegisModuleCapability<TModule>` for an adapter, `AddStellaegisModuleParameter<TModule>` for the
+  application, and `ConfrontStellaegisModules()`, which an application without ASP.NET Core calls once at startup.
 
 ### Changed
 

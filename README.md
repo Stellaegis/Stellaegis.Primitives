@@ -13,12 +13,13 @@ The library targets .NET 10 and is released under the MIT license.
 
 ## Packages
 
-The library is split in three, so that code which never touches a database takes no data-access
+The library is split in four, so that code which never touches a database takes no data-access
 dependency, and code that exposes no endpoint takes no dependency on ASP.NET Core.
 
 | Package | Contents | Depends on |
 | --- | --- | --- |
-| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment`, `Space` and `Actor`, the module identity, the event marker and the publication port | .NET only |
+| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment`, `Space` and `Actor`, the module identity, the event marker and the publication port; the application frame, what a module declares, and the confrontation of the two | .NET only |
+| `Stellaegis.Primitives.DependencyInjection` | The registration of the frame and of what each module and its adapter declare, and their confrontation at startup — with or without ASP.NET Core | `Stellaegis.Primitives`, the dependency injection abstractions |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
 | `Stellaegis.Primitives.AspNetCore` | The routes' module, the request context port, giving the space and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
