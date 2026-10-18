@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Stellaegis.Primitives.AspNetCore;
+using Stellaegis.Primitives.DependencyInjection;
 
 namespace Stellaegis.Primitives.Tests.AspNetCore;
 
@@ -31,7 +32,7 @@ public class EndpointNameTests
     public async Task A_module_mapped_twice_with_named_routes_fails_the_startup()
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.CompartmentFromRoute("org")),
+            services => services.AddStellaegisFrame(ApplicationFrame.ManyCompartments().WithSharedSpace()).AddStellaegisRequestContext(c => c.CompartmentFromRoute("org")),
             MapNamedModuleTwice));
 
         Assert.Contains("ListItems", exception.Message);
@@ -45,7 +46,7 @@ public class EndpointNameTests
     public async Task Distinct_names_start()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")),
+            services => services.AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme")).AddStellaegisRequestContext(),
             routes =>
             {
                 routes.MapGet("/one", () => "one").WithName("One");
@@ -87,7 +88,7 @@ public class EndpointNameTests
     public async Task Names_differing_in_case_do_not_collide()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")),
+            services => services.AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme")).AddStellaegisRequestContext(),
             routes =>
             {
                 routes.MapGet("/one", () => "one").WithName("Same");

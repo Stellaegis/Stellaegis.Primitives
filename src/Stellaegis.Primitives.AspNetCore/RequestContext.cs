@@ -4,9 +4,11 @@ namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
 /// The only <see cref="IRequestContext"/>: the shared space on a route marked for it, without reading the source;
-/// the compartment of the source elsewhere.
+/// the frame's compartment in an application with a single one, without reading the source either; the compartment
+/// of the source in an application with many.
 /// </summary>
-internal sealed class RequestContext(IHttpContextAccessor accessor, IRequestContextSource source) : IRequestContext
+internal sealed class RequestContext(IHttpContextAccessor accessor, IRequestContextSource source, ApplicationFrame frame)
+    : IRequestContext
 {
     private bool _spaceRead;
     private Space? _space;
@@ -19,7 +21,14 @@ internal sealed class RequestContext(IHttpContextAccessor accessor, IRequestCont
             {
                 _space = Current(accessor).GetEndpoint()?.Metadata.GetMetadata<SharedSpaceMetadata>() is not null
                     ? Primitives.Space.Shared
-                    : source.Compartment;
+                    : frame.Compartments switch
+                    {
+                        CompartmentCount.Single => frame.FixedCompartment,
+                        CompartmentCount.Many => source.Compartment,
+                        _ => throw new InvalidOperationException(
+                            "The request context is read in an application without compartments: it has no space to give. "
+                            + "Declare the application's compartments with AddStellaegisFrame(...)."),
+                    };
                 _spaceRead = true;
             }
             return _space;

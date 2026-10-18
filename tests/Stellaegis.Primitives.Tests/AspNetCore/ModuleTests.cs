@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Stellaegis.Primitives.AspNetCore;
+using Stellaegis.Primitives.DependencyInjection;
 
 namespace Stellaegis.Primitives.Tests.AspNetCore;
 
@@ -64,6 +65,8 @@ public class ModuleTests
         public static string Name => string.Empty;
     }
 
+    private static readonly ModuleDeclaration Rendering = ModuleDeclaration.WithoutCompartments<RenderingModule>();
+
     // A module without compartments: it reads no request context, so the application registers none.
     private static RouteGroupBuilder MapRendering(IEndpointRouteBuilder routes)
     {
@@ -76,7 +79,7 @@ public class ModuleTests
     public async Task A_module_without_compartments_is_checked_at_startup()
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
-            services => services.AddStellaegisStartupCheck().AddAuthorization(),
+            services => services.AddStellaegisStartupCheck().AddStellaegisModule(Rendering).AddAuthorization(),
             routes => MapRendering(routes).AllowAnyResource()));
 
         Assert.Contains("rendering.html", exception.Message);
@@ -87,7 +90,7 @@ public class ModuleTests
     public async Task A_module_without_compartments_needs_no_request_context()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisStartupCheck().AddAuthorization(),
+            services => services.AddStellaegisStartupCheck().AddStellaegisModule(Rendering).AddAuthorization(),
             routes => MapRendering(routes).AllowAnonymous().AllowAnyResource());
 
         Assert.Null(app.Services.GetService<IRequestContext>());
@@ -110,7 +113,7 @@ public class ModuleTests
     public async Task A_route_labelled_outside_any_module_fails_the_startup()
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
-            services => services.AddStellaegisStartupCheck().AddAuthorization(),
+            services => services.AddStellaegisStartupCheck().AddStellaegisModule(Rendering).AddAuthorization(),
             routes =>
             {
                 MapRendering(routes).AllowAnonymous().AllowAnyResource();
@@ -127,7 +130,9 @@ public class ModuleTests
     public async Task Two_module_types_with_the_same_name_fail_the_startup()
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
-            services => services.AddStellaegisStartupCheck(),
+            services => services.AddStellaegisStartupCheck()
+                .AddStellaegisModule(Rendering)
+                .AddStellaegisModule(ModuleDeclaration.WithoutCompartments<OtherRenderingModule>()),
             routes =>
             {
                 routes.MapGroup("/one").BelongsTo<RenderingModule>().MapGet("/", () => "one");
@@ -143,7 +148,7 @@ public class ModuleTests
     public async Task One_module_mapped_twice_is_not_a_homonym()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisStartupCheck(),
+            services => services.AddStellaegisStartupCheck().AddStellaegisModule(Rendering),
             routes =>
             {
                 routes.MapGroup("/one").BelongsTo<RenderingModule>().MapGet("/", () => "one");
@@ -153,11 +158,39 @@ public class ModuleTests
         Assert.Equal("two", await app.GetTestClient().GetStringAsync("/two", Ct));
     }
 
+    // Without this, a module with compartments that forgot to declare itself would escape the confrontation, and
+    // with it the refusal of an isolation by owner it cannot hold.
+    [Fact]
+    public async Task A_module_on_the_routes_and_absent_from_the_registrations_fails_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddStellaegisStartupCheck().AddAuthorization(),
+            routes => MapRendering(routes).AllowAnonymous().AllowAnyResource()));
+
+        Assert.Contains("Routes belong to modules nothing declares: rendering", exception.Message);
+        Assert.Contains("AddStellaegisModule", exception.Message);
+    }
+
+    [Fact]
+    public async Task A_module_declared_without_compartments_cannot_read_the_request_context()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services
+                .AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme"))
+                .AddStellaegisRequestContext()
+                .AddStellaegisModule(Rendering)
+                .AddAuthorization(),
+            routes => MapRendering(routes).RequireRequestContext().AllowAnonymous().AllowAnyResource()));
+
+        Assert.Contains("their module is declared without compartments", exception.Message);
+        Assert.Contains("/rendering/html (rendering)", exception.Message);
+    }
+
     [Fact]
     public async Task A_module_name_follows_the_rule()
     {
         await using (await TestApp.StartAsync(
-            services => services.AddStellaegisStartupCheck(),
+            services => services.AddStellaegisStartupCheck().AddStellaegisModule(ModuleDeclaration.WithoutCompartments<LongestModule>()),
             routes => routes.MapGroup("/m").BelongsTo<LongestModule>()))
         {
         }
@@ -184,7 +217,7 @@ public class ModuleTests
     {
         var services = new ServiceCollection()
             .AddStellaegisStartupCheck()
-            .AddStellaegisRequestContext(c => c.SingleCompartment("acme"))
+            .AddStellaegisRequestContext()
             .AddStellaegisStartupCheck();
 
         Assert.Single(services, descriptor => descriptor.ServiceType == typeof(IStartupFilter));

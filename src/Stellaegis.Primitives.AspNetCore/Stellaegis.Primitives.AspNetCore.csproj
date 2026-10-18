@@ -12,6 +12,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <InternalsVisibleTo Include="Stellaegis.Primitives.Tests" />
     <ProjectReference Include="..\Stellaegis.Primitives\Stellaegis.Primitives.csproj" />
+    <ProjectReference Include="..\Stellaegis.Primitives.DependencyInjection\Stellaegis.Primitives.DependencyInjection.csproj" />
   </ItemGroup>
 
 </Project>

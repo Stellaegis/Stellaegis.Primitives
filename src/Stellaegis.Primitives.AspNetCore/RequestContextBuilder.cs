@@ -5,9 +5,11 @@ using Microsoft.AspNetCore.Routing;
 namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
-/// Declares where the configurable request context reads the compartment and the actor of a request.
-/// Exactly one compartment source is required. The actor defaults to the <see cref="ClaimTypes.NameIdentifier"/>
-/// claim, then <c>sub</c>, and to <c>anonymous</c> when no user is authenticated.
+/// Declares where the configurable request context reads the compartment and the actor of a request. How many
+/// compartments there are is the application frame's to say, not this builder's: an application with a single
+/// compartment declares no compartment source, one with many declares exactly one. The actor defaults to the
+/// <see cref="ClaimTypes.NameIdentifier"/> claim, then <c>sub</c>, and to the frame's anonymous actor when no user
+/// is authenticated.
 /// </summary>
 public sealed class RequestContextBuilder
 {
@@ -15,30 +17,9 @@ public sealed class RequestContextBuilder
 
     private Func<HttpContext, Compartment?>? _compartment;
     private Func<HttpContext, Actor?> _actor = http => ReadActorClaim(http, DefaultActorClaims);
-    private Actor _anonymous = Actor.Parse("anonymous");
 
     internal RequestContextBuilder()
     {
-    }
-
-    /// <summary>
-    /// Every request addresses the same compartment — an application that needs only one. Name it after the
-    /// organization that owns the data, as a real compartment: the day the application takes a second one, the
-    /// first keeps its name, and nothing is migrated.
-    /// </summary>
-    /// <exception cref="FormatException"><paramref name="compartment"/> is not a valid compartment.</exception>
-    public RequestContextBuilder SingleCompartment(string compartment)
-        => SingleCompartment(Compartment.Parse(Guard.NotNull(compartment)));
-
-    /// <inheritdoc cref="SingleCompartment(string)"/>
-    /// <remarks>
-    /// Takes the constant the application declares once, which its work outside requests — a scheduled task,
-    /// an import — passes to the modules as well.
-    /// </remarks>
-    public RequestContextBuilder SingleCompartment(Compartment compartment)
-    {
-        var single = Guard.NotNull(compartment);
-        return SetCompartment(_ => single);
     }
 
     /// <summary>
@@ -73,7 +54,7 @@ public sealed class RequestContextBuilder
     /// <summary>
     /// Reads the actor from a claim of the authenticated user — <c>oid</c> with Microsoft Entra, for instance,
     /// which stays the same from one application to another. Without an authenticated user, the actor is
-    /// the anonymous label.
+    /// the frame's anonymous actor.
     /// </summary>
     /// <remarks>
     /// An authenticated user without that claim, or with a value that is not a valid <see cref="Actor"/>,
@@ -89,7 +70,7 @@ public sealed class RequestContextBuilder
 
     /// <summary>
     /// Reads the actor with a function of the request. When it returns <see langword="null"/>, the actor is
-    /// the anonymous label.
+    /// the frame's anonymous actor.
     /// </summary>
     public RequestContextBuilder ActorFrom(Func<HttpContext, Actor?> source)
     {
@@ -97,20 +78,7 @@ public sealed class RequestContextBuilder
         return this;
     }
 
-    /// <summary>The label recorded as the actor of a request without one. Defaults to <c>anonymous</c>.</summary>
-    /// <exception cref="FormatException"><paramref name="label"/> is not a valid actor.</exception>
-    public RequestContextBuilder AnonymousActor(string label)
-    {
-        _anonymous = Actor.Parse(Guard.NotNull(label));
-        return this;
-    }
-
-    internal RequestContextSettings Build() => new(
-        _compartment ?? throw new InvalidOperationException(
-            "A request context needs a compartment source: call SingleCompartment, CompartmentFromRoute, "
-            + "CompartmentFromClaim or CompartmentFrom."),
-        _actor,
-        _anonymous);
+    internal RequestContextSettings Build() => new(_compartment, _actor);
 
     private RequestContextBuilder SetCompartment(Func<HttpContext, Compartment?> source)
     {
@@ -135,8 +103,10 @@ public sealed class RequestContextBuilder
     }
 }
 
-/// <summary>What a <see cref="RequestContextBuilder"/> declared: the compartment and actor sources, and the anonymous label.</summary>
+/// <summary>
+/// What a <see cref="RequestContextBuilder"/> declared: the compartment source, if any, and the actor source.
+/// Registered as a singleton, so that the startup check reads it against the frame.
+/// </summary>
 internal sealed record RequestContextSettings(
-    Func<HttpContext, Compartment?> Compartment,
-    Func<HttpContext, Actor?> Actor,
-    Actor Anonymous);
+    Func<HttpContext, Compartment?>? Compartment,
+    Func<HttpContext, Actor?> Actor);

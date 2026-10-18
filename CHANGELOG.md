@@ -34,6 +34,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking.** A module name is 3 to 63 lowercase letters and digits, starting with a letter, without a hyphen or
   an underscore: it may become, unchanged, the API code of a host serving only this module — an OAuth scope and
   audience —, a URL segment or a configuration key. `BelongsTo<TModule>()` refuses any other name.
+- **Breaking.** The request context reads the application frame instead of carrying it.
+  `RequestContextBuilder.SingleCompartment(...)` and `AnonymousActor(...)` are removed: the frame declares them,
+  `AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme"))` then `AddStellaegisRequestContext()`, its builder
+  now optional. With a single compartment, the frame gives it, and a source of the application's own gives only
+  the actor. `Stellaegis.Primitives.AspNetCore` references `Stellaegis.Primitives.DependencyInjection`.
+- **Breaking.** The startup check confronts the frame with the modules, and fails as well when a route belongs to a
+  module nothing declares with `AddStellaegisModule` — every module on the routes declares itself, an
+  application's own included; when a route reads the request context and its module is declared without
+  compartments; when a route is in the shared space of an application whose frame has none; when a request
+  context is registered in an application without compartments; when it declares a compartment source with a
+  single compartment, or none with many.
 
 ### Fixed
 

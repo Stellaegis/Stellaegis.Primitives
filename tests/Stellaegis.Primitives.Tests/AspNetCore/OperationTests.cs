@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Stellaegis.Primitives.AspNetCore;
+using Stellaegis.Primitives.DependencyInjection;
 
 namespace Stellaegis.Primitives.Tests.AspNetCore;
 
@@ -39,6 +40,17 @@ internal static class NotesEndpoints
     }
 }
 
+/// <summary>What an application with the notes module registers: its frame, its request context, the module.</summary>
+internal static class NotesRegistration
+{
+    public static IServiceCollection AddNotes(
+        this IServiceCollection services, ApplicationFrame? frame = null, Action<RequestContextBuilder>? requestContext = null)
+        => services
+            .AddStellaegisFrame(frame ?? ApplicationFrame.SingleCompartment("acme"))
+            .AddStellaegisRequestContext(requestContext)
+            .AddStellaegisModule(ModuleDeclaration.Compartmented<NotesModule>());
+}
+
 internal sealed record Note(string Id, Space Space, Actor Owner);
 
 /// <summary>A consumer's rule: a note is accessible to its owner only.</summary>
@@ -61,7 +73,7 @@ public class OperationTests
         => TestApp.StartAsync(
             s =>
             {
-                s.AddStellaegisRequestContext(c => c.SingleCompartment("acme"));
+                s.AddNotes();
                 services(s);
             },
             app => secure(app.MapGroup(prefix).MapNotesEndpoints()));
@@ -142,7 +154,7 @@ public class OperationTests
     {
         await using var app = await TestApp.StartAsync(
             services => services
-                .AddStellaegisRequestContext(c => c.SingleCompartment("acme"))
+                .AddNotes()
                 .AddAuthorization(options =>
                 {
                     options.AddPolicy("member", policy => policy.RequireAuthenticatedUser());
@@ -163,7 +175,7 @@ public class OperationTests
     {
         await using var app = await TestApp.StartAsync(
             services => services
-                .AddStellaegisRequestContext(c => c.CompartmentFromRoute("org"))
+                .AddNotes(ApplicationFrame.ManyCompartments(), c => c.CompartmentFromRoute("org"))
                 .AddSingleton<IAuthorizationHandler, MemberOfCompartmentRule>()
                 .AddAuthorization(options => options.AddPolicy("member", policy => policy.AddRequirements(new MemberOfCompartment()))),
             routes => routes.MapGroup("/orgs/{org}").MapNotesEndpoints()
@@ -260,7 +272,7 @@ public class OperationTests
     public async Task Only_the_routes_without_authorization_are_named()
     {
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")).AddAuthorization(),
+            services => services.AddNotes().AddAuthorization(),
             routes =>
             {
                 var group = routes.MapGroup("/open").BelongsTo<NotesModule>().RequireRequestContext().AllowAnyResource();
@@ -276,7 +288,7 @@ public class OperationTests
     public async Task Every_form_of_authorization_counts()
     {
         await using var app = await TestApp.StartAsync(
-            services => services.AddStellaegisRequestContext(c => c.SingleCompartment("acme")).AddAuthorization(),
+            services => services.AddNotes().AddAuthorization(),
             routes =>
             {
                 var group = routes.MapGroup("/forms").BelongsTo<NotesModule>().RequireRequestContext().AllowAnyResource();

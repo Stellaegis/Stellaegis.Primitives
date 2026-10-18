@@ -4,11 +4,15 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Stellaegis.Primitives.DependencyInjection;
 
 namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
-/// Fails the startup when two routes share a name; when two module types carry the same name; when a route is
+/// Fails the startup when the application frame and the modules' declarations do not hold together
+/// (<see cref="ApplicationFrame.Confront"/>); when the request context disagrees with the frame; when a route
+/// belongs to a module nothing declares, or reads the request context while its module is declared without
+/// compartments; when a route is in the shared space of an application without one; when two routes share a name; when two module types carry the same name; when a route is
 /// in the shared space without a declaration accepting it; when a route labelled with an <see cref="Operation"/>
 /// belongs to no module; when it declares no authorization — neither a requirement nor
 /// <c>AllowAnonymous</c>; when it would refuse every resource — no authorization handler for operations, and no
@@ -32,12 +36,113 @@ internal sealed class EndpointStartupCheck : IStartupFilter
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
     {
         next(app);
-        var endpoints = app.ApplicationServices.GetService<EndpointDataSource>()?.Endpoints ?? [];
+        var services = app.ApplicationServices;
+        var frame = services.GetStellaegisFrame();
+        var modules = services.GetStellaegisModules();
+        frame.Confront(modules);
+        CheckRequestContext(services, frame);
+
+        var endpoints = services.GetService<EndpointDataSource>()?.Endpoints ?? [];
         CheckEndpointNames(endpoints);
         CheckModules(endpoints);
+        CheckDeclaredModules(endpoints, modules);
+        CheckFrame(endpoints, frame);
         CheckSharedSpace(endpoints);
-        CheckOperations(app.ApplicationServices, endpoints);
+        CheckOperations(services, endpoints);
     };
+
+    // How many compartments there are is the frame's to say; where a request reads its own, the request context's.
+    private static void CheckRequestContext(IServiceProvider services, ApplicationFrame frame)
+    {
+        if (services.GetService<IServiceProviderIsService>()?.IsService(typeof(IRequestContext)) != true)
+            return;
+
+        if (frame.Compartments == CompartmentCount.None)
+        {
+            throw new InvalidOperationException(
+                $"A request context is registered, and the application frame ({frame}) has no compartments: there is no "
+                + "space to give a request. Declare the application's compartments, with "
+                + "AddStellaegisFrame(ApplicationFrame.SingleCompartment(\"acme\")) or ApplicationFrame.ManyCompartments(), "
+                + "or remove AddStellaegisRequestContext(...).");
+        }
+
+        if (services.GetService<RequestContextSettings>() is not { } settings)
+            return;
+        if (frame.Compartments == CompartmentCount.Single && settings.Compartment is not null)
+        {
+            throw new InvalidOperationException(
+                $"The request context declares a compartment source, and the application frame ({frame}) has a single "
+                + "compartment: every request addresses it. Remove the compartment source from AddStellaegisRequestContext(...), "
+                + "or declare ApplicationFrame.ManyCompartments().");
+        }
+        if (frame.Compartments == CompartmentCount.Many && settings.Compartment is null)
+        {
+            throw new InvalidOperationException(
+                $"The application frame ({frame}) has many compartments, and the request context declares no source to read "
+                + "each request's from: declare one, such as AddStellaegisRequestContext(c => c.CompartmentFromRoute(\"org\")).");
+        }
+    }
+
+    // A module present on the routes and absent from the registrations would escape the confrontation: a module
+    // with compartments that cannot hold the frame's isolation by owner would start without a word.
+    private static void CheckDeclaredModules(IEnumerable<Endpoint> all, IReadOnlyList<ModuleDeclaration> modules)
+    {
+        var declared = modules.ToDictionary(module => module.Module, module => module, EqualityComparer<Type>.Default);
+        var routed = all
+            .Select(endpoint => (Endpoint: endpoint, Module: endpoint.Metadata.GetMetadata<ModuleMetadata>()))
+            .Where(routed => routed.Module is not null)
+            .ToList();
+
+        var undeclared = routed
+            .Select(routed => routed.Module!)
+            .Where(module => !declared.ContainsKey(module.Type))
+            .Distinct()
+            .ToList();
+        if (undeclared.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Routes belong to modules nothing declares: {string.Join(", ", undeclared.Select(module => module.Name))}. "
+                + "Register each module, with AddStellaegisModule(ModuleDeclaration.Compartmented<TModule>()) or "
+                + "ModuleDeclaration.WithoutCompartments<TModule>() — usually the module's own registration does; "
+                + "an application's own module is declared by the application.");
+        }
+
+        var contradicted = routed
+            .Where(routed => routed.Endpoint.Metadata.GetMetadata<RequestContextDeclaration>() is not null
+                && !declared[routed.Module!.Type].IsCompartmented)
+            .Select(routed => routed.Endpoint)
+            .ToList();
+        if (contradicted.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"These routes read the request context, and their module is declared without compartments: "
+                + $"{DescribeWithModule(contradicted)}. Declare the module with ModuleDeclaration.Compartmented<TModule>(), "
+                + "or remove RequireRequestContext() from its routes.");
+        }
+    }
+
+    // A route reading the request context in an application without compartments needs no check of its own:
+    // RequireRequestContext needs a registered request context, which CheckRequestContext refuses in such a frame.
+    private static void CheckFrame(IEnumerable<Endpoint> all, ApplicationFrame frame)
+    {
+        if (frame.HasSharedSpace)
+            return;
+
+        var shared = all.Where(endpoint => endpoint.Metadata.GetMetadata<SharedSpaceMetadata>() is not null).ToList();
+        if (shared.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"These routes are in the shared space, and the application frame ({frame}) has none: "
+                + $"{DescribeWithModule(shared)}. Remove InSharedSpace() from them, or declare the shared space "
+                + "in the frame, with WithSharedSpace().");
+        }
+    }
+
+    private static string DescribeWithModule(IEnumerable<Endpoint> endpoints)
+        => string.Join(", ", endpoints.Select(endpoint =>
+            endpoint.Metadata.GetMetadata<ModuleMetadata>() is { } module
+                ? $"{endpoint.DisplayName} ({module.Name})"
+                : endpoint.DisplayName));
 
     // ASP.NET Core compares endpoint names ordinally, and fails every request of the host on a duplicate: a module
     // naming its routes and mapped twice — once per compartment, once in the shared space — is the usual cause.
