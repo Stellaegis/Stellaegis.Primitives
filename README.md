@@ -1,6 +1,6 @@
 # Stellaegis.Primitives
 
-Stellaegis.Primitives is a small set of .NET building blocks shared by the Stellaegis modules:
+Stellaegis.Primitives is a set of .NET building blocks shared by the Stellaegis modules:
 operation results, argument guards, events, a unit of work over ADO.NET, and the declarations that let
 every module of an application isolate its data the same way. Each Stellaegis module is a library
 published on its own. These primitives are the part they have in common, so that a module does not
@@ -14,6 +14,12 @@ You can use them without any other Stellaegis package. They know nothing of tena
 bus: those are decisions of the application that hosts them. HTTP is confined to a package of its own,
 which only the modules exposing endpoints reference.
 
+The packages that assemble an application are strict on purpose. `Stellaegis.Primitives.DependencyInjection`
+and `Stellaegis.Primitives.AspNetCore` check at startup what the application and its modules declare, and an
+application whose declarations do not hold fails to start, naming what to change: a module with compartments
+in an application that has none, or a module's route that states no authorization. `Stellaegis.Primitives`
+on its own checks nothing at startup.
+
 The library targets .NET 10 and is released under the MIT license.
 
 ## Packages
@@ -23,14 +29,26 @@ dependency, and code that exposes no endpoint takes no dependency on ASP.NET Cor
 
 | Package | Contents | Depends on |
 | --- | --- | --- |
-| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment`, `Space` and `Actor`, the module identity, the event marker and the publication port; the application frame, what a module declares, and the confrontation of the two | .NET only |
-| `Stellaegis.Primitives.DependencyInjection` | The registration of the frame and of what each module and its adapter declare, and their confrontation at startup — with or without ASP.NET Core | `Stellaegis.Primitives`, the dependency injection abstractions |
+| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment`, `Space` and `Actor`, the module identity, the event marker and the publication port; the application frame, what a module declares, and the validation of the two | .NET only |
+| `Stellaegis.Primitives.DependencyInjection` | The registration of the frame and of what each module and its adapter declare, and their validation at startup — with or without ASP.NET Core | `Stellaegis.Primitives`, the dependency injection abstractions |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
 | `Stellaegis.Primitives.AspNetCore` | The routes' module, the request context port, giving the space and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
 writes a relational database. Depending on `Stellaegis.Primitives.AspNetCore` says that it maps HTTP
 endpoints.
+
+## Identifiers at a glance
+
+Four kinds of identifier appear in the sections below. Each grammar comes from where the value ends up, so
+they differ on purpose. None of them converts: a value outside its grammar is refused, never rewritten.
+
+| Identifier | Grammar | Example | Why this grammar |
+| --- | --- | --- | --- |
+| A compartment | 3 to 63 lowercase letters, digits and single hyphens, starting with a letter and ending with a letter or a digit | `acme` | The shape of a DNS label: it may name a subdomain, a path segment or a cache key |
+| A module name | 3 to 63 lowercase letters and digits, starting with a letter | `documents` | It may become an API code, an OAuth scope, a URL segment or a configuration key, unchanged |
+| An operation's target and name | 1 to 63 lowercase letters, digits and single underscores, starting with a letter and ending with a letter or a digit | `fiscal_years.validate` | The grammar of table names, which permission codes follow too |
+| An actor | 1 to 128 characters, no control character, no leading or trailing whitespace | `job:purge` | It comes from a token whose format is not under your control |
 
 ## Results and errors
 
@@ -337,6 +355,10 @@ var factory = new InMemorySpaceUnitOfWorkFactory<InvoicingDatabase>((space, acto
     new InMemoryRepositoryRegistry<InvoicingDatabase>().Add<IInvoiceRepository>(() => stores[space]));
 ```
 
+⚠ The in-memory factories reproduce neither the session context nor row-level security. A service whose
+isolation rests on the database looks just as isolated in memory whether its policies are right, wrong or
+missing. Test the isolation against a real engine, as this library tests its session context.
+
 ## Mapping snake_case columns with Dapper
 
 Database columns are often named in snake_case (`display_name`) while C# properties use PascalCase
@@ -479,7 +501,7 @@ application chooses to turn on, its **parameters**, with
 These registrations, and `AddStellaegisFrame(AppFrame.Value)` for the frame, come from
 `Stellaegis.Primitives.DependencyInjection`.
 
-### The confrontation
+### Validating the modules against the frame
 
 At startup, the frame is read against the declaration of every module. The application fails to start,
 naming each module at fault and what to change, when:
@@ -491,7 +513,7 @@ naming each module at fault and what to change, when:
 - a module is declared twice, two module types carry the same name, or a capability or a parameter is
   given to a module nothing declares.
 
-An ASP.NET Core host runs the confrontation by itself, with the startup check of its routes. An
+An ASP.NET Core host runs this validation by itself, with the startup check of its routes. An
 application without ASP.NET Core — a desktop application, a worker — calls it once, after building its
 services and before anything runs:
 
@@ -500,10 +522,10 @@ var services = new ServiceCollection()
     .AddStellaegisFrame(AppFrame.Value)
     // the modules' registrations
     .BuildServiceProvider();
-services.ConfrontStellaegisModules();
+services.ValidateStellaegisModules();
 ```
 
-⚠ The confrontation reads declarations, not the database. A module whose adapter declares an isolation by
+⚠ The validation reads declarations, not the database. A module whose adapter declares an isolation by
 owner is trusted to have its rule installed; checking the database itself at startup is not part of this
 release.
 
@@ -695,8 +717,8 @@ every resource, and nothing fails.
 of the frame and the routes. The application fails to start, with a message naming the modules or the
 routes and the way out, when:
 
-- the frame and the modules' declarations do not hold together — the confrontation of
-  *The application frame*;
+- the frame and the modules' declarations do not hold together — see *Validating the modules against the
+  frame*;
 - a request context is registered in an application without compartments, declares a compartment source
   with a single compartment, or none with many;
 - a route belongs to a module nothing declares, or reads the request context while its module is declared
