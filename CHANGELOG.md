@@ -7,6 +7,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [4.1.0] — 2026-10-19
+
+The check of the frame against the modules' declarations takes the name of what it does: a validation. The former
+names stay, marked obsolete, so 4.0 code still builds, with a warning. The four packages move together to 4.1.0.
+
+### Changed
+
+- `ApplicationFrame.Validate(...)` replaces `ApplicationFrame.Confront(...)`, and `ValidateStellaegisModules()`
+  replaces `ConfrontStellaegisModules()`. Their behaviour is unchanged.
+- The README announces that the packages assembling an application refuse to start on declarations that do not
+  hold, gathers the four identifier grammars in one table, and warns that the in-memory units of work reproduce
+  neither the session context nor row-level security.
+
+### Deprecated
+
+- `ApplicationFrame.Confront(...)` and `ConfrontStellaegisModules()`, which call their replacements. They will be
+  removed in the next major version.
+
 ## [4.0.0] — 2026-10-18
 
 An application declares its frame once — its compartments, its shared space, its isolation by owner — and every
@@ -240,7 +258,8 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
-[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v1.1.0...v2.0.0
