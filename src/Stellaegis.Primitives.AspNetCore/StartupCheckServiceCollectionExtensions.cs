@@ -9,7 +9,7 @@ public static class StartupCheckServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the startup check of the routes, which fails the application before it serves anything when the
-    /// application frame and its modules do not hold together (<c>ConfrontStellaegisModules</c>), when the request
+    /// application frame and its modules do not hold together (<c>ValidateStellaegisModules</c>), when the request
     /// context disagrees with the frame, or when a route's declarations do not hold: it belongs to a module nothing
     /// declares; it reads the request context or addresses a shared space the frame does not have; two routes share a name; a route in the shared space is not declared to
     /// accept it; a route labelled with an <see cref="Operation"/> belongs to no module, declares no

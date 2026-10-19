@@ -10,7 +10,7 @@ namespace Stellaegis.Primitives.DependencyInjection;
 /// builder.Services.AddStellaegisModule(ModuleDeclaration.Compartmented&lt;DocumentsModule&gt;());          // the module
 /// builder.Services.AddStellaegisModuleCapability&lt;DocumentsModule&gt;(ModuleCapability.OwnerIsolation); // its adapter
 /// </code>
-/// <see cref="StellaegisServiceProviderExtensions.ConfrontStellaegisModules"/> reads them together.
+/// <see cref="StellaegisServiceProviderExtensions.ValidateStellaegisModules"/> reads them together.
 /// </summary>
 public static class StellaegisServiceCollectionExtensions
 {
@@ -59,7 +59,7 @@ public static class StellaegisServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Turns on a capability of <typeparamref name="TModule"/>, as the application's choice. The confrontation
+    /// Turns on a capability of <typeparamref name="TModule"/>, as the application's choice. The validation
     /// refuses a parameter outside the module's capabilities.
     /// </summary>
     /// <exception cref="ArgumentException">The name of <typeparamref name="TModule"/> is not a valid module name.</exception>

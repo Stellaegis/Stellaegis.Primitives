@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Stellaegis.Primitives.DependencyInjection</RootNamespace>
     <PackageId>Stellaegis.Primitives.DependencyInjection</PackageId>
-    <Description>Stellaegis primitives for an application assembled by dependency injection, with or without ASP.NET Core: its frame declared once, what each module and its adapter declare, and the confrontation of the two at startup. No dependency beyond the dependency injection abstractions.</Description>
+    <Description>Stellaegis primitives for an application assembled by dependency injection, with or without ASP.NET Core: its frame declared once, what each module and its adapter declare, and the validation of the two at startup. No dependency beyond the dependency injection abstractions.</Description>
     <PackageTags>stellaegis;dependency-injection;compartment;modules</PackageTags>
   </PropertyGroup>
 

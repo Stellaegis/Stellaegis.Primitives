@@ -138,18 +138,18 @@ public sealed class ApplicationFrame
     /// together, naming every module at fault and what to change. Called once, at startup, before anything is
     /// served — by the host's registration, or explicitly by an application without one:
     /// <code>
-    /// AppFrame.Value.Confront([documents, messaging]);
+    /// AppFrame.Value.Validate([documents, messaging]);
     /// </code>
     /// </summary>
     /// <remarks>
     /// Refused: a module declared twice, or two module types carrying the same name; a module with compartments
     /// in an application without any; a module with compartments that cannot hold the isolation by owner the
     /// frame declares; a parameter outside the module's capabilities. The guarantee stays the refusal at run time;
-    /// the confrontation turns it into a message, before the first user meets it.
+    /// the validation turns it into a message, before the first user meets it.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="modules"/>, or one of them, is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The frame and the modules do not hold together.</exception>
-    public void Confront(IEnumerable<ModuleDeclaration> modules)
+    public void Validate(IEnumerable<ModuleDeclaration> modules)
     {
         var declared = Guard.NotNull(modules).Select(module => Guard.NotNull(module)).ToList();
         var faults = new List<string>();
@@ -192,6 +192,10 @@ public sealed class ApplicationFrame
                 $"The modules do not hold with the application frame ({this}): {string.Join("; ", faults)}.");
         }
     }
+
+    /// <summary>The former name of <see cref="Validate"/>, kept for 4.0 code.</summary>
+    [Obsolete("Use Validate, its new name.")]
+    public void Confront(IEnumerable<ModuleDeclaration> modules) => Validate(modules);
 
     /// <summary>The frame as one line, for a startup message: <c>single compartment 'acme', owner isolation</c>.</summary>
     public override string ToString()

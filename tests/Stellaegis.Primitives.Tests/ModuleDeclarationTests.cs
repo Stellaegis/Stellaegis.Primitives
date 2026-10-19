@@ -78,9 +78,9 @@ public class ModuleDeclarationTests
     [Fact]
     public void A_frame_holds_with_modules_that_fit_it()
     {
-        ApplicationFrame.WithoutCompartments.Confront([ModuleDeclaration.WithoutCompartments<SecretsModule>()]);
-        ApplicationFrame.WithoutCompartments.Confront([]);
-        ApplicationFrame.ManyCompartments().Confront([
+        ApplicationFrame.WithoutCompartments.Validate([ModuleDeclaration.WithoutCompartments<SecretsModule>()]);
+        ApplicationFrame.WithoutCompartments.Validate([]);
+        ApplicationFrame.ManyCompartments().Validate([
             ModuleDeclaration.Compartmented<DocumentsModule>(),
             ModuleDeclaration.Compartmented<MessagingModule>().WithCapability(InheritSharedSpace).WithParameter(InheritSharedSpace),
             ModuleDeclaration.WithoutCompartments<SecretsModule>(),
@@ -91,7 +91,7 @@ public class ModuleDeclarationTests
     public void A_module_with_compartments_needs_an_application_with_compartments()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            ApplicationFrame.WithoutCompartments.Confront([ModuleDeclaration.Compartmented<DocumentsModule>()]));
+            ApplicationFrame.WithoutCompartments.Validate([ModuleDeclaration.Compartmented<DocumentsModule>()]));
 
         Assert.Contains("documents has compartments", exception.Message);
         Assert.Contains("SingleCompartment", exception.Message);
@@ -100,12 +100,12 @@ public class ModuleDeclarationTests
     [Fact]
     public void An_isolation_by_owner_is_held_by_every_module_with_compartments()
     {
-        OwnerIsolated.Confront([
+        OwnerIsolated.Validate([
             ModuleDeclaration.Compartmented<DocumentsModule>().WithCapability(ModuleCapability.OwnerIsolation),
             ModuleDeclaration.WithoutCompartments<SecretsModule>(),
         ]);
 
-        var exception = Assert.Throws<InvalidOperationException>(() => OwnerIsolated.Confront([
+        var exception = Assert.Throws<InvalidOperationException>(() => OwnerIsolated.Validate([
             ModuleDeclaration.Compartmented<DocumentsModule>().WithCapability(ModuleCapability.OwnerIsolation),
             ModuleDeclaration.Compartmented<MessagingModule>(),
         ]));
@@ -118,7 +118,7 @@ public class ModuleDeclarationTests
     [Fact]
     public void A_parameter_is_chosen_among_the_capabilities()
     {
-        var exception = Assert.Throws<InvalidOperationException>(() => ApplicationFrame.ManyCompartments().Confront([
+        var exception = Assert.Throws<InvalidOperationException>(() => ApplicationFrame.ManyCompartments().Validate([
             ModuleDeclaration.Compartmented<DocumentsModule>().WithParameter(InheritSharedSpace),
         ]));
 
@@ -128,11 +128,11 @@ public class ModuleDeclarationTests
     [Fact]
     public void A_module_is_declared_once_and_its_name_is_its_own()
     {
-        var twice = Assert.Throws<InvalidOperationException>(() => ApplicationFrame.ManyCompartments().Confront([
+        var twice = Assert.Throws<InvalidOperationException>(() => ApplicationFrame.ManyCompartments().Validate([
             ModuleDeclaration.Compartmented<DocumentsModule>(),
             ModuleDeclaration.Compartmented<DocumentsModule>(),
         ]));
-        var homonyms = Assert.Throws<InvalidOperationException>(() => ApplicationFrame.ManyCompartments().Confront([
+        var homonyms = Assert.Throws<InvalidOperationException>(() => ApplicationFrame.ManyCompartments().Validate([
             ModuleDeclaration.Compartmented<DocumentsModule>(),
             ModuleDeclaration.Compartmented<OtherDocumentsModule>(),
         ]));
@@ -145,7 +145,7 @@ public class ModuleDeclarationTests
     [Fact]
     public void Every_fault_is_named_at_once()
     {
-        var exception = Assert.Throws<InvalidOperationException>(() => OwnerIsolated.Confront([
+        var exception = Assert.Throws<InvalidOperationException>(() => OwnerIsolated.Validate([
             ModuleDeclaration.Compartmented<DocumentsModule>(),
             ModuleDeclaration.Compartmented<MessagingModule>().WithParameter(InheritSharedSpace),
         ]));
@@ -156,9 +156,19 @@ public class ModuleDeclarationTests
     }
 
     [Fact]
-    public void Confront_rejects_null()
+    public void Validate_rejects_null()
     {
-        Assert.Throws<ArgumentNullException>(() => OwnerIsolated.Confront(null!));
-        Assert.Throws<ArgumentNullException>(() => OwnerIsolated.Confront([null!]));
+        Assert.Throws<ArgumentNullException>(() => OwnerIsolated.Validate(null!));
+        Assert.Throws<ArgumentNullException>(() => OwnerIsolated.Validate([null!]));
+    }
+
+    [Fact]
+    public void Confront_stays_the_former_name_of_Validate()
+    {
+#pragma warning disable CS0618 // the former name, kept for 4.0 code
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ApplicationFrame.WithoutCompartments.Confront([ModuleDeclaration.Compartmented<DocumentsModule>()]));
+#pragma warning restore CS0618
+        Assert.Contains("documents has compartments, and the application has none", exception.Message);
     }
 }

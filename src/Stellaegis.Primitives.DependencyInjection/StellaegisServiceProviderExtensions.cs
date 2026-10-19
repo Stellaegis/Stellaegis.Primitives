@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Stellaegis.Primitives.DependencyInjection;
 
-/// <summary>Reads an application's frame and what its modules declare, and confronts the two.</summary>
+/// <summary>Reads an application's frame and what its modules declare, and validates the two.</summary>
 public static class StellaegisServiceProviderExtensions
 {
     /// <summary>
@@ -14,7 +14,7 @@ public static class StellaegisServiceProviderExtensions
 
     /// <summary>
     /// What each registered module declares, completed with the capabilities its adapter registers and the
-    /// parameters the application chooses. A module registered twice appears twice, so that the confrontation
+    /// parameters the application chooses. A module registered twice appears twice, so that the validation
     /// refuses it.
     /// </summary>
     /// <exception cref="InvalidOperationException">
@@ -48,17 +48,21 @@ public static class StellaegisServiceProviderExtensions
     }
 
     /// <summary>
-    /// Confronts the registered frame with the registered modules, and fails naming every module at fault
-    /// (<see cref="ApplicationFrame.Confront"/>). An application without ASP.NET Core calls it once, right after
+    /// Validates the registered frame against the registered modules, and fails naming every module at fault
+    /// (<see cref="ApplicationFrame.Validate"/>). An application without ASP.NET Core calls it once, right after
     /// building its services and before anything runs; an ASP.NET Core host calls it at startup by itself.
     /// <code>
     /// var services = new ServiceCollection().AddStellaegisFrame(AppFrame.Value)/* ... */.BuildServiceProvider();
-    /// services.ConfrontStellaegisModules();
+    /// services.ValidateStellaegisModules();
     /// </code>
     /// </summary>
     /// <exception cref="InvalidOperationException">The frame and the modules do not hold together.</exception>
-    public static void ConfrontStellaegisModules(this IServiceProvider services)
-        => services.GetStellaegisFrame().Confront(services.GetStellaegisModules());
+    public static void ValidateStellaegisModules(this IServiceProvider services)
+        => services.GetStellaegisFrame().Validate(services.GetStellaegisModules());
+
+    /// <summary>The former name of <see cref="ValidateStellaegisModules"/>, kept for 4.0 code.</summary>
+    [Obsolete("Use ValidateStellaegisModules, its new name.")]
+    public static void ConfrontStellaegisModules(this IServiceProvider services) => services.ValidateStellaegisModules();
 
     // Every declaration of a module receives the capabilities and parameters registered for it.
     private static ModuleDeclaration Complete(ModuleDeclaration declaration, IEnumerable<ModuleContribution> contributions)

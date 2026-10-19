@@ -158,7 +158,7 @@ public class ModuleTests
         Assert.Equal("two", await app.GetTestClient().GetStringAsync("/two", Ct));
     }
 
-    // Without this, a module with compartments that forgot to declare itself would escape the confrontation, and
+    // Without this, a module with compartments that forgot to declare itself would escape the validation, and
     // with it the refusal of an isolation by owner it cannot hold.
     [Fact]
     public async Task A_module_on_the_routes_and_absent_from_the_registrations_fails_the_startup()

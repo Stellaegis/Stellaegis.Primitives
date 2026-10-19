@@ -32,7 +32,7 @@ public class AssemblyTests
     private static IServiceCollection AddMessaging(IServiceCollection services)
         => services.AddStellaegisModule(ModuleDeclaration.Compartmented<MessagingModule>().WithCapability(InheritSharedSpace));
 
-    private static void Confront(IServiceCollection services) => services.BuildServiceProvider().ConfrontStellaegisModules();
+    private static void Validate(IServiceCollection services) => services.BuildServiceProvider().ValidateStellaegisModules();
 
     [Fact]
     public void The_frame_is_registered_once_and_readable()
@@ -48,9 +48,20 @@ public class AssemblyTests
     [Fact]
     public void An_application_without_a_frame_has_no_compartments()
     {
-        Confront(new ServiceCollection());
+        Validate(new ServiceCollection());
 
-        var exception = Assert.Throws<InvalidOperationException>(() => Confront(AddDocuments(new ServiceCollection())));
+        var exception = Assert.Throws<InvalidOperationException>(() => Validate(AddDocuments(new ServiceCollection())));
+        Assert.Contains("documents has compartments, and the application has none", exception.Message);
+    }
+
+    [Fact]
+    public void ConfrontStellaegisModules_stays_the_former_name_of_ValidateStellaegisModules()
+    {
+        var services = AddDocuments(new ServiceCollection()).BuildServiceProvider();
+
+#pragma warning disable CS0618 // the former name, kept for 4.0 code
+        var exception = Assert.Throws<InvalidOperationException>(() => services.ConfrontStellaegisModules());
+#pragma warning restore CS0618
         Assert.Contains("documents has compartments, and the application has none", exception.Message);
     }
 
@@ -59,10 +70,10 @@ public class AssemblyTests
     {
         var frame = ApplicationFrame.SingleCompartment("acme").WithOwnerIsolation();
 
-        Confront(AddDocumentsPostgreSql(new ServiceCollection().AddStellaegisFrame(frame)));
+        Validate(AddDocumentsPostgreSql(new ServiceCollection().AddStellaegisFrame(frame)));
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            Confront(AddDocuments(new ServiceCollection().AddStellaegisFrame(frame))));
+            Validate(AddDocuments(new ServiceCollection().AddStellaegisFrame(frame))));
         Assert.Contains("documents cannot hold the isolation by owner", exception.Message);
     }
 
@@ -71,10 +82,10 @@ public class AssemblyTests
     {
         var services = AddMessaging(new ServiceCollection().AddStellaegisFrame(ApplicationFrame.ManyCompartments()))
             .AddStellaegisModuleParameter<MessagingModule>(InheritSharedSpace);
-        Confront(services);
+        Validate(services);
 
         AddDocuments(services).AddStellaegisModuleParameter<DocumentsModule>(InheritSharedSpace);
-        var exception = Assert.Throws<InvalidOperationException>(() => Confront(services));
+        var exception = Assert.Throws<InvalidOperationException>(() => Validate(services));
         Assert.Contains("documents is given a parameter it has no capability for", exception.Message);
     }
 
@@ -86,7 +97,7 @@ public class AssemblyTests
             .AddStellaegisModuleCapability<DocumentsModule>(ModuleCapability.OwnerIsolation)
             .AddStellaegisModuleParameter<MessagingModule>(InheritSharedSpace);
 
-        var exception = Assert.Throws<InvalidOperationException>(() => Confront(services));
+        var exception = Assert.Throws<InvalidOperationException>(() => Validate(services));
 
         Assert.Contains("documents (capability owner_isolation)", exception.Message);
         Assert.Contains("messaging (parameter inherit_shared_space)", exception.Message);
@@ -98,7 +109,7 @@ public class AssemblyTests
     {
         var services = AddDocuments(AddDocuments(new ServiceCollection().AddStellaegisFrame(ApplicationFrame.ManyCompartments())));
 
-        var exception = Assert.Throws<InvalidOperationException>(() => Confront(services));
+        var exception = Assert.Throws<InvalidOperationException>(() => Validate(services));
 
         Assert.Contains("DocumentsModule is declared 2 times", exception.Message);
     }

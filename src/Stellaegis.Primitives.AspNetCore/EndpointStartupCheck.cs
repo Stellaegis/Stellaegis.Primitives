@@ -10,7 +10,7 @@ namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
 /// Fails the startup when the application frame and the modules' declarations do not hold together
-/// (<see cref="ApplicationFrame.Confront"/>); when the request context disagrees with the frame; when a route
+/// (<see cref="ApplicationFrame.Validate"/>); when the request context disagrees with the frame; when a route
 /// belongs to a module nothing declares, or reads the request context while its module is declared without
 /// compartments; when a route is in the shared space of an application without one; when two routes share a name; when two module types carry the same name; when a route is
 /// in the shared space without a declaration accepting it; when a route labelled with an <see cref="Operation"/>
@@ -39,7 +39,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         var services = app.ApplicationServices;
         var frame = services.GetStellaegisFrame();
         var modules = services.GetStellaegisModules();
-        frame.Confront(modules);
+        frame.Validate(modules);
         CheckRequestContext(services, frame);
 
         var endpoints = services.GetService<EndpointDataSource>()?.Endpoints ?? [];
@@ -83,7 +83,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         }
     }
 
-    // A module present on the routes and absent from the registrations would escape the confrontation: a module
+    // A module present on the routes and absent from the registrations would escape the validation: a module
     // with compartments that cannot hold the frame's isolation by owner would start without a word.
     private static void CheckDeclaredModules(IEnumerable<Endpoint> all, IReadOnlyList<ModuleDeclaration> modules)
     {

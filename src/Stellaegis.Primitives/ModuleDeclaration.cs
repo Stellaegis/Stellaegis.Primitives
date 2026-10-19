@@ -5,7 +5,7 @@ namespace Stellaegis.Primitives;
 /// <summary>
 /// What a module declares to the application that assembles it: whether it has compartments, the capabilities it
 /// has, and the parameters the assembly chooses among them. Read against the <see cref="ApplicationFrame"/> by
-/// <see cref="ApplicationFrame.Confront"/>, which refuses an assembly that does not hold.
+/// <see cref="ApplicationFrame.Validate"/>, which refuses an assembly that does not hold.
 /// <code>
 /// var documents = ModuleDeclaration.Compartmented&lt;DocumentsModule&gt;()
 ///     .WithCapability(ModuleCapability.OwnerIsolation);   // declared by its PostgreSQL adapter
@@ -72,7 +72,7 @@ public sealed class ModuleDeclaration
 
     /// <summary>
     /// Turns <paramref name="capability"/> on, as the assembly's choice. Checked by
-    /// <see cref="ApplicationFrame.Confront"/>, which refuses a parameter outside the module's capabilities.
+    /// <see cref="ApplicationFrame.Validate"/>, which refuses a parameter outside the module's capabilities.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="capability"/> is <see langword="null"/>.</exception>
     public ModuleDeclaration WithParameter(ModuleCapability capability)
