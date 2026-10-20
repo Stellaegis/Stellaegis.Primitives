@@ -9,12 +9,13 @@ namespace Stellaegis.Primitives.Tests.Data;
 
 /// <summary>
 /// The verification of the module databases by a host, against a real PostgreSQL named by
-/// <c>STELLAEGIS_TEST_POSTGRESQL</c> and skipped without it. Its own schema, <c>lcv</c>, so that it never meets the
-/// life-cycle tests running beside it.
+/// <c>STELLAEGIS_TEST_POSTGRESQL</c> and skipped without it. Its own schema, <c>lcv</c>, and its own application
+/// role, <c>lcv_app</c>, so that it never meets the life-cycle tests running beside it.
 /// </summary>
 public sealed class DatabaseVerificationTests : IAsyncLifetime
 {
     private const string Schema = "lcv";
+    private const string AppRole = "lcv_app";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private sealed class GadgetsModule : IStellaegisModule
@@ -37,7 +38,14 @@ public sealed class DatabaseVerificationTests : IAsyncLifetime
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(Ct);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"drop schema if exists {Schema} cascade";
+        command.CommandText = $"""
+            drop schema if exists {Schema} cascade;
+            do $$ begin
+              if not exists (select 1 from pg_roles where rolname = '{AppRole}') then
+                create role {AppRole} login password '{AppRole}';
+              end if;
+            end $$;
+            """;
         await command.ExecuteNonQueryAsync(Ct);
     }
 
@@ -74,7 +82,7 @@ public sealed class DatabaseVerificationTests : IAsyncLifetime
             Assert.Contains("gadgets is not installed", exception.Message);
         }
 
-        await DatabaseLifecycle.InstallAsync([Gadgets], Acme, (_, ct) => OpenAsync(ct), "lcw_app", cancellationToken: Ct);
+        await DatabaseLifecycle.InstallAsync([Gadgets], Acme, (_, ct) => OpenAsync(ct), AppRole, cancellationToken: Ct);
 
         using (var host = BuildHost())
         {
