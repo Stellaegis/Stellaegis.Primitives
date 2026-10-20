@@ -3,7 +3,7 @@ using System.Reflection;
 namespace Stellaegis.Primitives.AspNetCore;
 
 /// <summary>
-/// Labels an action, or every action of a controller, with an <see cref="AspNetCore.Operation"/> the module
+/// Labels an action, or every action of a controller, with an <see cref="Primitives.Operation"/> the module
 /// declares as a static member — what <c>.WithMetadata(operation)</c> does on a route:
 /// <code>
 /// public static class NotesOperations
@@ -18,7 +18,7 @@ namespace Stellaegis.Primitives.AspNetCore;
 /// <remarks>
 /// An attribute takes constants only, so it names the operation rather than holding it: the operation is written
 /// once, where the module declares it. The member is read when the endpoints are built, and a missing member, or one
-/// that is not an <see cref="AspNetCore.Operation"/>, fails the startup check. An action's label prevails over its
+/// that is not an <see cref="Primitives.Operation"/>, fails the startup check. An action's label prevails over its
 /// controller's.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = true)]
@@ -33,7 +33,7 @@ public sealed class OperationAttribute(Type declaringType, string memberName) : 
     public string MemberName { get; } = memberName;
 
     /// <summary>The operation the member holds.</summary>
-    /// <exception cref="InvalidOperationException">The member does not exist, or holds no <see cref="AspNetCore.Operation"/>.</exception>
+    /// <exception cref="InvalidOperationException">The member does not exist, or holds no <see cref="Primitives.Operation"/>.</exception>
     public Operation Operation => _operation.Value;
 
     private static Operation Resolve(Type declaringType, string memberName)

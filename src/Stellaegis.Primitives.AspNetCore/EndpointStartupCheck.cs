@@ -11,8 +11,8 @@ namespace Stellaegis.Primitives.AspNetCore;
 /// <summary>
 /// Fails the startup when the application frame and the modules' declarations do not hold together
 /// (<see cref="ApplicationFrame.Validate"/>); when the request context disagrees with the frame; when a route
-/// belongs to a module nothing declares, or reads the request context while its module is declared without
-/// compartments; when a route is in the shared space of an application without one; when two routes share a name; when two module types carry the same name; when a route is
+/// belongs to a module nothing declares, is labelled with an operation its module does not declare, or reads the
+/// request context while its module is declared without compartments; when a route is in the shared space of an application without one; when two routes share a name; when two module types carry the same name; when a route is
 /// in the shared space without a declaration accepting it; when a route labelled with an <see cref="Operation"/>
 /// belongs to no module; when it declares no authorization — neither a requirement nor
 /// <c>AllowAnonymous</c>; when it would refuse every resource — no authorization handler for operations, and no
@@ -47,6 +47,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         CheckRequestContextRegistered(services, endpoints);
         CheckModules(endpoints);
         CheckDeclaredModules(endpoints, modules);
+        CheckDeclaredOperations(endpoints, modules);
         CheckFrame(endpoints, frame);
         CheckSharedSpace(endpoints);
         CheckOperations(services, endpoints);
@@ -119,6 +120,27 @@ internal sealed class EndpointStartupCheck : IStartupFilter
                 $"These routes read the request context, and their module is declared without compartments: "
                 + $"{DescribeWithModule(contradicted)}. Declare the module with ModuleDeclaration.Compartmented<TModule>(), "
                 + "or remove RequireRequestContext() from its routes.");
+        }
+    }
+
+    // A route labelled with an operation its module does not declare would escape the catalogue, which reads the
+    // declarations: an application granting from the catalogue would never see the operation it needs to grant.
+    private static void CheckDeclaredOperations(IEnumerable<Endpoint> all, IReadOnlyList<ModuleDeclaration> modules)
+    {
+        var declared = modules.ToDictionary(module => module.Module, module => module.Operations, EqualityComparer<Type>.Default);
+        var undeclared = all
+            .Select(endpoint => (Endpoint: endpoint, Operation: endpoint.GetOperation(), Module: endpoint.GetModule()))
+            .Where(routed => routed.Operation is not null && routed.Module is not null
+                && !declared[routed.Module.Type].Contains(routed.Operation))
+            .ToList();
+        if (undeclared.Count > 0)
+        {
+            var described = string.Join(", ", undeclared.Select(routed =>
+                $"{routed.Endpoint.DisplayName} ({routed.Operation}, {routed.Operation!.Kind}, of {routed.Module!.Name})"));
+            throw new InvalidOperationException(
+                $"These routes are labelled with operations their module does not declare: {described}. Declare the "
+                + "operations of a module on its declaration, AddStellaegisModule(ModuleDeclaration.Compartmented<TModule>()"
+                + ".WithOperations(...)); an identity declared with another kind is another operation.");
         }
     }
 
@@ -261,7 +283,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         {
             throw new InvalidOperationException(
                 $"These routes check every resource they load, and nothing answers: {Describe(closed)}. "
-                + "Register a handler for the resources, such as an AuthorizationHandler<Operation, TResource>, "
+                + "Register a handler for the resources, such as an AuthorizationHandler<OperationRequirement, TResource>, "
                 + "or declare that any user reaching the routes may access any resource, with .AllowAnyResource().");
         }
 
@@ -305,7 +327,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
                 continue;
             var definition = current.GetGenericTypeDefinition();
             if (definition == typeof(AuthorizationHandler<>) || definition == typeof(AuthorizationHandler<,>))
-                return current.GetGenericArguments()[0].IsAssignableFrom(typeof(Operation));
+                return current.GetGenericArguments()[0].IsAssignableFrom(typeof(OperationRequirement));
         }
         return true;
     }

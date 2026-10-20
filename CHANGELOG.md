@@ -7,6 +7,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+The one break of the 5.0 line, taken in one go while no version has a download. An operation is a declaration of
+the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The four packages move together.
+
+### Migrating from 4.x
+
+- `Operation` and `OperationKind` move to `Stellaegis.Primitives`: a module declares them in its core, next to its
+  module type, instead of its `.AspNetCore` project.
+- Each module declares its operations on its declaration,
+  `AddStellaegisModule(ModuleDeclaration.Compartmented<TModule>().WithOperations(...))`; a route labelled with an
+  operation its module does not declare fails the startup.
+- A handler for the resources is an `AuthorizationHandler<OperationRequirement, TResource>`, and reads the operation
+  as `requirement.Operation`; `AuthorizationHandler<Operation, TResource>` no longer compiles.
+
+### Added
+
+- `ModuleDeclaration.WithOperations(...)` and `ModuleDeclaration.Operations`: the operations a module performs, each
+  identity named once. The declarations of every module, `GetStellaegisModules()`, are the catalogue of what an
+  application can do, with or without ASP.NET Core; an operation with no route is a piece of work done outside
+  requests.
+- `Operation.Identity`, the `target.name` an application grants.
+- `OperationRequirement` (`Stellaegis.Primitives.AspNetCore`): the operation of a route as the requirement checked on
+  a resource.
+- The startup check refuses a route labelled with an operation its module does not declare.
+
+### Changed
+
+- **Breaking.** `Operation` no longer implements `IAuthorizationRequirement`; `AuthorizeResourceAsync` checks an
+  `OperationRequirement`, and handler detection looks for handlers of it.
+
 ## [4.3.0] — 2026-10-20
 
 A module written with MVC controllers declares with attributes what a module of route groups declares on its group,

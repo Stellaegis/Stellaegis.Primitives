@@ -28,8 +28,8 @@ public class ControllerTests
     internal static readonly string NotAnOperation = "notes.read";
 
     private static readonly ApplicationFrame Acme = ApplicationFrame.SingleCompartment("acme");
-    private static readonly ModuleDeclaration Notes = ModuleDeclaration.WithoutCompartments<NotesControllerModule>();
-    private static readonly ModuleDeclaration CompartmentedNotes = ModuleDeclaration.Compartmented<NotesControllerModule>();
+    private static readonly ModuleDeclaration Notes = ModuleDeclaration.WithoutCompartments<NotesControllerModule>().WithOperations(ReadNotes, WriteNotes);
+    private static readonly ModuleDeclaration CompartmentedNotes = ModuleDeclaration.Compartmented<NotesControllerModule>().WithOperations(ReadNotes, WriteNotes);
 
     // Through a group of routes
 

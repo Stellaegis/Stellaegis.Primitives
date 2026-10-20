@@ -29,10 +29,10 @@ dependency, and code that exposes no endpoint takes no dependency on ASP.NET Cor
 
 | Package | Contents | Depends on |
 | --- | --- | --- |
-| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, reading an error back from an HTTP answer, `Compartment`, `Space` and `Actor`, the module identity, the event marker and the publication port; the application frame, what a module declares, and the validation of the two | .NET only |
+| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, reading an error back from an HTTP answer, `Compartment`, `Space` and `Actor`, the module identity and the operations a module performs, the event marker and the publication port; the application frame, what a module declares, and the validation of the two | .NET only |
 | `Stellaegis.Primitives.DependencyInjection` | The registration of the frame and of what each module and its adapter declare, and their validation at startup — with or without ASP.NET Core | `Stellaegis.Primitives`, the dependency injection abstractions |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
-| `Stellaegis.Primitives.AspNetCore` | The routes' module, the request context port, giving the space and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
+| `Stellaegis.Primitives.AspNetCore` | The routes' module, the request context port, giving the space and the actor of a request; the operations on the routes, and their translation into what lets an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
 writes a relational database. Depending on `Stellaegis.Primitives.AspNetCore` says that it maps HTTP
@@ -497,9 +497,17 @@ explicit, with no default: a module with compartments that said nothing would es
 makes.
 
 ```csharp
-services.AddStellaegisModule(ModuleDeclaration.Compartmented<DocumentsModule>());           // the module
+services.AddStellaegisModule(ModuleDeclaration.Compartmented<DocumentsModule>()             // the module
+    .WithOperations(DocumentOperations.Read, DocumentOperations.Write, DocumentOperations.Purge));
 services.AddStellaegisModuleCapability<DocumentsModule>(ModuleCapability.OwnerIsolation);   // its PostgreSQL adapter
 ```
+
+A module also declares its **operations**: what it does, each with an identity the application grants (see
+*Securing a module's routes and data*). Every route of the module is labelled with one of them, and the startup check
+refuses a route labelled with an operation its module does not declare; an operation with no route is a piece of
+work done outside requests, a scheduled purge for instance. The declarations of every module,
+`services.GetStellaegisModules()`, are therefore the catalogue of what the application can do, readable with or
+without ASP.NET Core.
 
 A module also declares its **capabilities**: what it can do. Some depend on the database rather than on the
 module. An isolation by owner is a row-level security rule written for one engine, so the adapter for that
@@ -642,14 +650,23 @@ request, and work done outside a request — a scheduled task, an import — has
 
 ## Securing a module's routes and data
 
-A module does not decide who may call it. It labels each route with an `Operation`, which says what the
-route does, and the application attaches its own security to the group the module returns.
+A module does not decide who may call it. It declares its operations in its core, labels each route with one of
+them, which says what the route does, and the application attaches its own security to the group the module
+returns.
 
 ```csharp
-public static readonly Operation ValidateInvoices = new("invoices", "validate", OperationKind.Write);
+public static class InvoiceOperations
+{
+    public static readonly Operation Validate = new("invoices", "validate", OperationKind.Write);
+}
 
-group.MapPost("/invoices/{id}/validate", ...).WithMetadata(ValidateInvoices);
+services.AddStellaegisModule(ModuleDeclaration.Compartmented<InvoicingModule>().WithOperations(InvoiceOperations.Validate));
+group.MapPost("/invoices/{id}/validate", ...).WithMetadata(InvoiceOperations.Validate);
 ```
+
+`Operation` lives in `Stellaegis.Primitives`, so a module declares its operations without a dependency on ASP.NET
+Core; `Stellaegis.Primitives.AspNetCore` reads them on the routes and translates them into ASP.NET Core's
+authorization, and nothing more.
 
 An operation carries two things, and grants neither:
 
@@ -667,7 +684,8 @@ Administration is not a kind: it is an audience, and a module maps its administr
 
 | What | Who decides | How |
 | --- | --- | --- |
-| Which operation a route performs | the module | `Operation` metadata |
+| Which operations the module performs | the module | `WithOperations(...)` on its declaration |
+| Which operation a route performs | the module | `Operation` metadata, one of the declared |
 | Which module a route belongs to | the module | `BelongsTo<TModule>()` |
 | Who may call a route | the application | `.RequireAuthorization(...)`, a policy per operation, or `.AllowAnonymous()` — one of them, always |
 | Who may access a resource the route loads | the application | an authorization handler on the resource, or `.AllowAnyResource()` |
@@ -702,8 +720,8 @@ if (document is null || !await http.AuthorizeResourceAsync(document))
     return Results.NotFound();
 ```
 
-The application answers with an ordinary handler — `AuthorizationHandler<Operation, Document>` — and a
-refusal is answered as an absence. Refusal is the default: without a handler, nothing is accessible. An
+The application answers with an ordinary handler — `AuthorizationHandler<OperationRequirement, Document>`, the
+requirement carrying the route's operation — and a refusal is answered as an absence. Refusal is the default: without a handler, nothing is accessible. An
 application that lets any user reaching the routes access any resource they load declares it, as it would
 declare `[AllowAnonymous]` — so does an application whose database already filters what a route loads, by
 row-level security:
@@ -731,8 +749,8 @@ routes and the way out, when:
   frame*;
 - a request context is registered in an application without compartments, declares a compartment source
   with a single compartment, or none with many;
-- a route belongs to a module nothing declares, or reads the request context while its module is declared
-  without compartments;
+- a route belongs to a module nothing declares, is labelled with an operation its module does not declare, or
+  reads the request context while its module is declared without compartments;
 - a route is marked `InSharedSpace()` in an application whose frame has no shared space, or has no
   declaration accepting the shared space;
 - two routes share a name — ASP.NET Core would fail every request;
@@ -745,7 +763,7 @@ routes and the way out, when:
 - a policy it requires is not registered.
 
 Handler detection resolves the registered handlers, so a handler registered by a factory is seen. It
-cannot know which resources a handler covers: one handler for operations is enough to pass, and a handler
+cannot know which resources a handler covers: one handler for `OperationRequirement` is enough to pass, and a handler
 written directly against `IAuthorizationHandler` counts. The check turns an unexplained 404 into a
 message; the protection itself is refusal by default.
 
@@ -817,6 +835,8 @@ public static class NotesOperations
 {
     public static readonly Operation Read = new("notes", "read", OperationKind.Read);
 }
+
+services.AddStellaegisModule(ModuleDeclaration.Compartmented<NotesModule>().WithOperations(NotesOperations.Read));
 
 [ApiController, Route("notes/{org}")]
 [BelongsTo<NotesModule>]

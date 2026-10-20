@@ -65,7 +65,7 @@ public class ModuleTests
         public static string Name => string.Empty;
     }
 
-    private static readonly ModuleDeclaration Rendering = ModuleDeclaration.WithoutCompartments<RenderingModule>();
+    private static readonly ModuleDeclaration Rendering = ModuleDeclaration.WithoutCompartments<RenderingModule>().WithOperations(Render);
 
     // A module without compartments: it reads no request context, so the application registers none.
     private static RouteGroupBuilder MapRendering(IEndpointRouteBuilder routes)

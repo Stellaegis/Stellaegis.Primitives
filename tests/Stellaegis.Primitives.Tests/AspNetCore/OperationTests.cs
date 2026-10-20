@@ -22,6 +22,7 @@ internal static class NotesEndpoints
 {
     public static readonly Operation Read = new("notes", "read", OperationKind.Read);
     public static readonly Operation Write = new("notes", "write", OperationKind.Write);
+    public static readonly Operation Purge = new("notes", "purge", OperationKind.Delete);
 
     public static RouteGroupBuilder MapNotesEndpoints(this IEndpointRouteBuilder routes)
     {
@@ -48,16 +49,18 @@ internal static class NotesRegistration
         => services
             .AddStellaegisFrame(frame ?? ApplicationFrame.SingleCompartment("acme"))
             .AddStellaegisRequestContext(requestContext)
-            .AddStellaegisModule(ModuleDeclaration.Compartmented<NotesModule>());
+            .AddStellaegisModule(ModuleDeclaration.Compartmented<NotesModule>()
+                .WithOperations(NotesEndpoints.Read, NotesEndpoints.Write, NotesEndpoints.Purge));
 }
 
 internal sealed record Note(string Id, Space Space, Actor Owner);
 
 /// <summary>A consumer's rule: a note is accessible to its owner only.</summary>
-internal sealed class OwnerRule : AuthorizationHandler<Operation, Note>
+internal sealed class OwnerRule : AuthorizationHandler<OperationRequirement, Note>
 {
-    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, Operation requirement, Note resource)
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, OperationRequirement requirement, Note resource)
     {
+        Assert.Equal(NotesEndpoints.Read, requirement.Operation);
         if (context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value == resource.Owner.Value)
             context.Succeed(requirement);
         return Task.CompletedTask;
@@ -206,7 +209,7 @@ public class OperationTests
         Assert.Equal("john-1", await app.GetTestClient().GetStringAsync("/notes/john-1", Ct));
     }
 
-    private static readonly Operation Purge = new("notes", "purge", OperationKind.Delete);
+    private static readonly Operation Purge = NotesEndpoints.Purge;
 
     // The shape of UC-07: the main mapping allows any resource, the database isolating them; the administration
     // mapping holds a purge, which loads nothing, and the host registers no handler for the resources.
@@ -260,7 +263,7 @@ public class OperationTests
             StartNotesAsync(services => services.AddAuthorization(), group => group.AllowAnonymous()));
 
         Assert.Contains("notes.read", exception.Message);
-        Assert.Contains("AuthorizationHandler<Operation, TResource>", exception.Message);
+        Assert.Contains("AuthorizationHandler<OperationRequirement, TResource>", exception.Message);
         Assert.Contains(".AllowAnyResource()", exception.Message);
     }
 
@@ -290,6 +293,36 @@ public class OperationTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => StartNotesAsync(
             services => services.AddAuthorization().AddSingleton<IAuthorizationHandler, MemberOfCompartmentRule>(),
             group => group.AllowAnonymous()));
+    }
+
+    // The catalogue reads the declarations: an operation on a route and absent from them could never be granted.
+    [Fact]
+    public async Task A_route_labelled_with_an_operation_its_module_does_not_declare_fails_the_startup()
+    {
+        var archive = new Operation("notes", "archive", OperationKind.Write);
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddNotes().AddAuthorization(),
+            routes =>
+            {
+                var group = routes.MapNotesEndpoints().AllowAnonymous().AllowAnyResource();
+                group.MapPost("/archive", () => "archived").WithMetadata(archive);
+            }));
+
+        Assert.Contains("operations their module does not declare", exception.Message);
+        Assert.Contains("notes.archive", exception.Message);
+        Assert.Contains("WithOperations", exception.Message);
+        Assert.DoesNotContain("notes.read", exception.Message);
+    }
+
+    [Fact]
+    public async Task The_same_identity_with_another_kind_is_another_operation()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddNotes().AddAuthorization(),
+            routes => routes.MapNotesEndpoints().AllowAnonymous().AllowAnyResource()
+                .MapDelete("/all", () => "deleted").WithMetadata(new Operation("notes", "write", OperationKind.Delete))));
+
+        Assert.Contains("notes.write, Delete, of notes", exception.Message);
     }
 
     [Fact]

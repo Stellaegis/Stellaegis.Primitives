@@ -17,9 +17,9 @@ public static class ResourceAuthorizationExtensions
     /// </summary>
     /// <remarks>
     /// Always <see langword="true"/> when the consumer declared <c>AllowAnyResource</c>. Otherwise ASP.NET Core's
-    /// resource-based authorization answers, with the route's <see cref="Operation"/> as the requirement: a
-    /// handler of the consumer — an <c>AuthorizationHandler&lt;Operation, TResource&gt;</c> — must succeed, and
-    /// refusal is the default.
+    /// resource-based authorization answers, with the route's <see cref="Operation"/> as the requirement,
+    /// <see cref="OperationRequirement"/>: a handler of the consumer — an
+    /// <c>AuthorizationHandler&lt;OperationRequirement, TResource&gt;</c> — must succeed, and refusal is the default.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// The route is not labelled with an <see cref="Operation"/>, or declares it loads no resource.
@@ -44,7 +44,7 @@ public static class ResourceAuthorizationExtensions
             return true;
 
         var authorization = httpContext.RequestServices.GetRequiredService<IAuthorizationService>();
-        var result = await authorization.AuthorizeAsync(httpContext.User, resource, operation);
+        var result = await authorization.AuthorizeAsync(httpContext.User, resource, new OperationRequirement(operation));
         return result.Succeeded;
     }
 }

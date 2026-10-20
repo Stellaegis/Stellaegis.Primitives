@@ -22,9 +22,12 @@ public class AssemblyTests
         public static string Name => "html-pdf";
     }
 
+    private static readonly Operation ReadDocuments = new("documents", "read", OperationKind.Read);
+    private static readonly Operation PurgeDocuments = new("documents", "purge", OperationKind.Delete);
+
     // What a module's registration does, and what its PostgreSQL adapter adds.
     private static IServiceCollection AddDocuments(IServiceCollection services)
-        => services.AddStellaegisModule(ModuleDeclaration.Compartmented<DocumentsModule>());
+        => services.AddStellaegisModule(ModuleDeclaration.Compartmented<DocumentsModule>().WithOperations(ReadDocuments, PurgeDocuments));
 
     private static IServiceCollection AddDocumentsPostgreSql(IServiceCollection services)
         => AddDocuments(services).AddStellaegisModuleCapability<DocumentsModule>(ModuleCapability.OwnerIsolation);
@@ -98,6 +101,22 @@ public class AssemblyTests
 
         Assert.Contains(InheritSharedSpace, provider.GetStellaegisModule<MessagingModule>()!.Parameters);
         Assert.Null(provider.GetStellaegisModule<DocumentsModule>());
+    }
+
+    // The catalogue of an application, read without ASP.NET Core: every operation of every module, those with a
+    // route and those done outside requests alike.
+    [Fact]
+    public void The_declarations_are_the_catalogue_of_the_application()
+    {
+        using var provider = AddMessaging(AddDocuments(new ServiceCollection().AddStellaegisFrame(ApplicationFrame.ManyCompartments())))
+            .BuildServiceProvider();
+
+        var catalogue = provider.GetStellaegisModules()
+            .SelectMany(module => module.Operations.Select(operation => $"{module.Name}: {operation.Identity} {operation.Kind}"))
+            .ToList();
+
+        Assert.Equal(["documents: documents.read Read", "documents: documents.purge Delete"], catalogue);
+        Assert.Equal([ReadDocuments, PurgeDocuments], provider.GetStellaegisModule<DocumentsModule>()!.Operations);
     }
 
     [Fact]

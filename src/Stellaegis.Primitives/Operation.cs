@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
-
-namespace Stellaegis.Primitives.AspNetCore;
+namespace Stellaegis.Primitives;
 
 /// <summary>
 /// The nature of an <see cref="Operation"/>: what it does to the data, declared by the module rather than deduced
@@ -19,30 +17,34 @@ public enum OperationKind
 }
 
 /// <summary>
-/// What a route does: an operation on a type of target, such as validating invoices, and the nature of what it
-/// does to the data. A module labels each of its routes with one, as metadata.
+/// What a module does: an operation on a type of target, such as validating invoices, and the nature of what it
+/// does to the data. A module declares its operations once, on its <see cref="ModuleDeclaration"/>, and labels each
+/// of its routes with one of them; an operation with no route is a piece of work done outside requests.
 /// <code>
-/// public static readonly Operation ValidateInvoices = new("invoices", "validate", OperationKind.Write);
+/// public static class InvoiceOperations
+/// {
+///     public static readonly Operation Validate = new("invoices", "validate", OperationKind.Write);
+/// }
 ///
-/// group.MapPost("/invoices/{id}/validate", ...).WithMetadata(ValidateInvoices);
+/// services.AddStellaegisModule(ModuleDeclaration.Compartmented&lt;InvoicingModule&gt;().WithOperations(InvoiceOperations.Validate));
+/// group.MapPost("/invoices/{id}/validate", ...).WithMetadata(InvoiceOperations.Validate);
 /// </code>
 /// </summary>
 /// <remarks>
 /// <para>
 /// The operation describes; it grants nothing. Its identity, <c>target.name</c> — <c>invoices.validate</c> — is
-/// the key an application grants: a policy per operation (<c>RequireAuthorizationPerOperation</c>), a permission
-/// in a rights system. Its <see cref="Kind"/> is a fact about the data, read for audit or to refuse writes during
-/// a maintenance as much as for security. The module the route belongs to is declared on its group
-/// (<c>BelongsTo</c>), not here: one module may act on several targets.
+/// the key an application grants: a policy per operation, a permission in a rights system. Its <see cref="Kind"/>
+/// is a fact about the data, read for audit or to refuse writes during a maintenance as much as for security. The
+/// module the operation belongs to is the one that declares it: one module may act on several targets.
 /// </para>
 /// <para>
-/// It is also the requirement a module checks on a loaded resource (<c>AuthorizeResourceAsync</c>): the route and
-/// the data speak the same language. Immutable, so that an operation shared as a static field cannot be changed by
-/// any code holding it. Two operations are equal when their target, name and kind are. Administration has no kind
-/// of its own: it is an audience, not a nature, and a module maps its administration routes separately.
+/// The declarations of every module, read together, are the catalogue of what an application can do. Immutable, so
+/// that an operation shared as a static field cannot be changed by any code holding it. Two operations are equal
+/// when their target, name and kind are. Administration has no kind of its own: it is an audience, not a nature,
+/// and a module maps its administration routes separately.
 /// </para>
 /// </remarks>
-public sealed class Operation : IAuthorizationRequirement, IEquatable<Operation>
+public sealed class Operation : IEquatable<Operation>
 {
     /// <summary>
     /// Creates an operation on <paramref name="target"/>, such as <c>new("invoices", "validate", OperationKind.Write)</c>.
@@ -67,6 +69,9 @@ public sealed class Operation : IAuthorizationRequirement, IEquatable<Operation>
     /// <summary>The nature of the operation: what it does to the data.</summary>
     public OperationKind Kind { get; }
 
+    /// <summary>The identity of the operation, <c>target.name</c>, such as <c>invoices.validate</c>: the key an application grants.</summary>
+    public string Identity => $"{Target}.{Name}";
+
     /// <inheritdoc/>
     public bool Equals(Operation? other)
         => other is not null
@@ -87,5 +92,5 @@ public sealed class Operation : IAuthorizationRequirement, IEquatable<Operation>
     public static bool operator !=(Operation? left, Operation? right) => !(left == right);
 
     /// <summary>The identity of the operation, <c>target.name</c>, such as <c>invoices.validate</c>.</summary>
-    public override string ToString() => $"{Target}.{Name}";
+    public override string ToString() => Identity;
 }

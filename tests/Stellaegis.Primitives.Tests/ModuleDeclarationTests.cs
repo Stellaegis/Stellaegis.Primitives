@@ -45,6 +45,30 @@ public class ModuleDeclarationTests
         Assert.Empty(secrets.Parameters);
     }
 
+    private static readonly Operation Read = new("documents", "read", OperationKind.Read);
+    private static readonly Operation Purge = new("documents", "purge", OperationKind.Delete);
+
+    [Fact]
+    public void A_declaration_carries_the_operations_of_the_module()
+    {
+        var documents = ModuleDeclaration.Compartmented<DocumentsModule>().WithOperations(Read, Purge).WithOperations(Read);
+
+        Assert.Equal([Read, Purge], documents.Operations);
+        Assert.Equal("documents.read", Read.Identity);
+        Assert.Empty(ModuleDeclaration.Compartmented<DocumentsModule>().Operations);
+    }
+
+    [Fact]
+    public void An_identity_names_one_operation()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => ModuleDeclaration.Compartmented<DocumentsModule>()
+            .WithOperations(Read, new Operation("documents", "read", OperationKind.Write)));
+
+        Assert.Contains("documents declares documents.read twice, as Read and as Write", exception.Message);
+        Assert.Throws<ArgumentNullException>(() => ModuleDeclaration.Compartmented<DocumentsModule>().WithOperations(null!));
+        Assert.Throws<ArgumentNullException>(() => ModuleDeclaration.Compartmented<DocumentsModule>().WithOperations([null!]));
+    }
+
     [Fact]
     public void A_declaration_checks_the_module_name()
     {
