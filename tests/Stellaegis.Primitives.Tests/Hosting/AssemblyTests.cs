@@ -57,16 +57,6 @@ public class AssemblyTests
         Assert.Contains("documents has compartments, and the application has none", exception.Message);
     }
 
-    [Fact]
-    public void ConfrontStellaegisModules_stays_the_former_name_of_ValidateStellaegisModules()
-    {
-        var services = AddDocuments(new ServiceCollection()).BuildServiceProvider();
-
-#pragma warning disable CS0618 // the former name, kept for 4.0 code
-        var exception = Assert.Throws<InvalidOperationException>(() => services.ConfrontStellaegisModules());
-#pragma warning restore CS0618
-        Assert.Contains("documents has compartments, and the application has none", exception.Message);
-    }
 
     [Fact]
     public void The_adapter_brings_the_capability_the_frame_requires()

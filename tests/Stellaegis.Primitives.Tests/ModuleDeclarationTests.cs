@@ -236,13 +236,4 @@ public class ModuleDeclarationTests
         Assert.Throws<ArgumentNullException>(() => OwnerIsolated.Validate([null!]));
     }
 
-    [Fact]
-    public void Confront_stays_the_former_name_of_Validate()
-    {
-#pragma warning disable CS0618 // the former name, kept for 4.0 code
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            ApplicationFrame.WithoutCompartments.Confront([ModuleDeclaration.Compartmented<DocumentsModule>()]));
-#pragma warning restore CS0618
-        Assert.Contains("documents has compartments, and the application has none", exception.Message);
-    }
 }

@@ -27,21 +27,6 @@ public class UserFacingException : Exception
         Error = error;
     }
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="UserFacingException"/> with a message and no code.
-    /// </summary>
-    /// <param name="message">A message describing what the caller can correct.</param>
-    /// <param name="type">Error category. Defaults to <see cref="ErrorType.Validation"/>; <see cref="ErrorType.None"/> is rejected.</param>
-    /// <param name="innerException">The exception that caused this error, if any.</param>
-    [Obsolete("Pass an Error, whose code lets the caller recognize this exception. This constructor will be removed in the next major version.")]
-    public UserFacingException(string message, ErrorType type = ErrorType.Validation, Exception? innerException = null)
-        : base(message, innerException)
-    {
-        if (type == ErrorType.None)
-            throw new ArgumentOutOfRangeException(nameof(type), type, "A user-facing exception cannot carry ErrorType.None.");
-        Error = new Error(string.Empty, message, type);
-    }
-
     /// <summary>The error this exception carries: its code, its message and its category.</summary>
     public Error Error { get; }
 

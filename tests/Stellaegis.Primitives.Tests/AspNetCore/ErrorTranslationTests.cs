@@ -126,17 +126,6 @@ public class ErrorTranslationTests
         Assert.Equal("Chromium exited at /opt/pw.", body.GetProperty("detail").GetString());
     }
 
-    [Fact]
-    public async Task A_user_facing_exception_without_code_answers_no_code()
-    {
-#pragma warning disable CS0618 // the former constructor, kept for 4.1 code
-        var (status, body) = await AnswerAsync(string () => throw new UserFacingException("This note is locked.", ErrorType.Conflict));
-#pragma warning restore CS0618
-
-        Assert.Equal(HttpStatusCode.Conflict, status);
-        Assert.Equal("This note is locked.", body.GetProperty("detail").GetString());
-        Assert.False(body.TryGetProperty("code", out _));
-    }
 
     [Theory]
     [InlineData(ErrorType.Validation)]

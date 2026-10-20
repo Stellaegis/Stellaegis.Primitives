@@ -204,10 +204,6 @@ public sealed class ApplicationFrame
         }
     }
 
-    /// <summary>The former name of <see cref="Validate"/>, kept for 4.0 code.</summary>
-    [Obsolete("Use Validate, its new name.")]
-    public void Confront(IEnumerable<ModuleDeclaration> modules) => Validate(modules);
-
     /// <summary>The frame as one line, for a startup message: <c>single compartment 'acme', owner isolation</c>.</summary>
     public override string ToString()
     {

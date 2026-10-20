@@ -102,10 +102,6 @@ public static class StellaegisServiceProviderExtensions
         }
     }
 
-    /// <summary>The former name of <see cref="ValidateStellaegisModules"/>, kept for 4.0 code.</summary>
-    [Obsolete("Use ValidateStellaegisModules, its new name.")]
-    public static void ConfrontStellaegisModules(this IServiceProvider services) => services.ValidateStellaegisModules();
-
     // Every declaration of a module receives the capabilities and parameters registered for it.
     private static ModuleDeclaration Complete(ModuleDeclaration declaration, IEnumerable<ModuleContribution> contributions)
     {

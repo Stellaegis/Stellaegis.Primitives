@@ -47,8 +47,8 @@ they differ on purpose. None of them converts: a value outside its grammar is re
 | --- | --- | --- | --- |
 | A compartment | 3 to 63 lowercase letters, digits and single hyphens, starting with a letter and ending with a letter or a digit | `acme` | The shape of a DNS label: it may name a subdomain, a path segment or a cache key |
 | A module name | 3 to 63 lowercase letters and digits, starting with a letter | `documents` | It may become an API code, an OAuth scope, a URL segment or a configuration key, unchanged |
-| An operation's target and name | 1 to 63 lowercase letters, digits and single underscores, starting with a letter and ending with a letter or a digit | `fiscal_years.validate` | The grammar of table names, which permission codes follow too |
-| An actor | 1 to 128 characters, no control character, no leading or trailing whitespace | `job:purge` | It comes from a token whose format is not under your control |
+| An identifier: an operation's target and name, a capability, a job, a schema, a table, a policy, an extension | 1 to 63 lowercase letters, digits and single underscores, starting with a letter and ending with a letter or a digit | `fiscal_years.validate`, `owner_isolation`, `job:purge` | The grammar of table names, which permission codes follow too; a name that reaches an engine is never quoted |
+| An actor | 1 to 128 characters, no control character, no leading or trailing whitespace | `3f2504e0…`, `job:purge` | It comes from a token whose format is not under your control |
 
 ## Results and errors
 
@@ -188,8 +188,8 @@ A record carries the value; an adapter that wants the mention adds a column of i
 plain string, or an object `{ "value": …, "via": … }` when someone acts on its behalf — both are read back.
 
 Both types implement `IParsable<T>`: `Parse` throws a `FormatException` on an invalid value, `TryParse`
-returns `false`. Both serialize to JSON as a plain string, also as a dictionary key, with reflection or
-with source generation.
+returns `false`. Both serialize to JSON as a plain string — an actor as an object when someone acts on its behalf
+—, and as a dictionary key by their value, with reflection or with source generation.
 
 ## Events
 
@@ -622,9 +622,9 @@ var services = new ServiceCollection()
 services.ValidateStellaegisModules();
 ```
 
-⚠ The validation reads declarations, not the database. A module whose adapter declares an isolation by
-owner is trusted to have its rule installed; checking the database itself at startup is not part of this
-release.
+The validation reads declarations. What the database holds — the scripts applied, the rule of an isolation by
+owner, the tables under row-level security — is verified apart, under the application's role, by the verification
+of the module databases (see *Installing and verifying a module's database* and *Assembling an application*).
 
 ## Assembling an application
 
@@ -859,9 +859,10 @@ about. Its module declares it with `LoadsNoResource()`, and the application then
 nor `AllowAnyResource()` for that route. Who may call the route stays the application's decision, as on
 any other, and `AuthorizeResourceAsync` fails on it.
 
-⚠ The startup check reads the routes, not the database. When `AllowAnyResource()` relies on row-level
-security, the rule must be installed in the database: without it, every user reaching the routes accesses
-every resource, and nothing fails.
+⚠ The startup check reads the routes. When `AllowAnyResource()` relies on row-level security, the rule must be
+in the database: without it, every user reaching the routes accesses every resource, and nothing fails. The
+verification of the module databases at startup is what proves it is there (see *Installing and verifying a
+module's database*).
 
 ### Acting on spaces
 
@@ -892,7 +893,7 @@ one registered beside the frame's.
 
 ```csharp
 await foreach (var compartment in directory.ListAsync(ct))
-    await documents.PurgeCompartmentAsync(compartment, Actor.Parse("job:purge"), ct);
+    await documents.PurgeCompartmentAsync(compartment, Actor.Job("purge"), ct);
 ```
 
 ### Checked at startup

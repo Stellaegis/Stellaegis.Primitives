@@ -7,33 +7,49 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-The one break of the 5.0 line, taken in one go while no version has a download. An operation is a declaration of
-the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The four packages move together.
+## [5.0.0] — 2026-10-20
+
+The one break of the 5.0 line, taken in one go while no version has a download. The frame of the application says
+what is true of it, and a module declares everything the frame is read against — its operations, whether it
+serves the shared space, whether it has compartments, its database — in its core, ASP.NET Core only translating.
+The assembly package is `Stellaegis.Primitives.Hosting`. The four packages move together to 5.0.0.
 
 ### Migrating from 4.x
 
-- `Operation` and `OperationKind` move to `Stellaegis.Primitives`: a module declares them in its core, next to its
-  module type, instead of its `.AspNetCore` project.
-- Each module declares its operations on its declaration,
-  `AddStellaegisModule(ModuleDeclaration.Compartmented<TModule>().WithOperations(...))`; a route labelled with an
-  operation its module does not declare fails the startup.
-- A handler for the resources is an `AuthorizationHandler<OperationRequirement, TResource>`, and reads the operation
-  as `requirement.Operation`; `AuthorizationHandler<Operation, TResource>` no longer compiles.
-- A module that serves the shared space says so on its declaration, `.AcceptingSharedSpace()`, and its routes
-  write `RequireRequestContext()` with nothing more. `RequireRequestContext(acceptsSharedSpace: true)` becomes
-  `RequireRequestContext(SharedSpaceAcceptance.Accepted)`, for routes of the application's own; `acceptsSharedSpace:
-  false` becomes `SharedSpaceAcceptance.Refused`, for a sub-group of a module that accepts it. On a controller,
-  `[RequiresRequestContext(SharedSpace = SharedSpaceAcceptance.Accepted)]`.
-- A capability that supposes a shared space declares it, `new ModuleCapability("inherit_shared_space",
-  requiresSharedSpace: true)`: turned on as a parameter in an application whose frame has no `WithSharedSpace()`,
-  it fails the startup.
-- `ModuleDeclaration.IsCompartmented` stays, and `Compartments` says more: none, optional or required.
-- `Stellaegis.Primitives.DependencyInjection` is `Stellaegis.Primitives.Hosting`: the package, the namespace. Its
-  admission widens to the Microsoft.Extensions abstractions of an assembled application — options, configuration,
-  host, HTTP client factory —, which is what it is for; the core still takes nothing beyond .NET.
-- `Stellaegis.Primitives.Data` references `Stellaegis.Primitives.Hosting` and the host abstractions, for the
-  verification of the module databases at startup; an application without a database takes neither Dapper nor
-  `.Data`.
+In the order a module follows it:
+
+1. `Stellaegis.Primitives.DependencyInjection` is `Stellaegis.Primitives.Hosting`: the package reference and the
+   namespace. Its admission widens to the Microsoft.Extensions abstractions of an assembled application — options,
+   configuration, host, HTTP client factory. `Stellaegis.Primitives.Data` references it; the core still takes
+   nothing beyond .NET.
+2. `Operation` and `OperationKind` move to `Stellaegis.Primitives`: a module declares its operations in its core,
+   next to its module type, and on its declaration,
+   `AddStellaegisModule(ModuleDeclaration.Compartmented<TModule>().WithOperations(...))`. A route labelled with an
+   operation its module does not declare fails the startup; an identity declared with two kinds is refused.
+3. A handler for the resources is an `AuthorizationHandler<OperationRequirement, TResource>`, and reads the
+   operation as `requirement.Operation`; `AuthorizationHandler<Operation, TResource>` no longer compiles.
+4. A module that serves the shared space says so on its declaration, `.AcceptingSharedSpace()`, and its routes
+   write `RequireRequestContext()` with nothing more. `RequireRequestContext(acceptsSharedSpace: true)` becomes
+   `RequireRequestContext(SharedSpaceAcceptance.Accepted)`, for routes of the application's own, which belong to no
+   module; `acceptsSharedSpace: false` becomes `SharedSpaceAcceptance.Refused`, for a sub-group of a module that
+   accepts it. On a controller, `[RequiresRequestContext(SharedSpace = SharedSpaceAcceptance.Accepted)]`.
+5. A module's administration routes declare `ActsOnSpaces()` on their group: on them `IRequestContext.Space`
+   fails, the space being the object of the route.
+6. A module serving an application without compartments as well as one with declares
+   `ModuleDeclaration.OptionallyCompartmented<TModule>()`. `IsCompartmented` stays; `Compartments` says more.
+7. A capability that supposes a shared space declares it, `new ModuleCapability("inherit_shared_space",
+   requiresSharedSpace: true)`: turned on in an application whose frame has no `WithSharedSpace()`, it fails the
+   startup. `ModuleCapability.OwnerIsolation` reads as a compatibility: a module none of whose data belongs to an
+   actor declares it from its core.
+8. `UserFacingException(string message, ErrorType type, …)` is gone: pass an `Error`, whose code lets the caller
+   recognize the exception. `Confront` and `ConfrontStellaegisModules()` are gone: `Validate` and
+   `ValidateStellaegisModules()`.
+9. Two actors are equal when their values and their acting parties are; an actor with an acting party
+   serializes as an object. A Dapper parameter still sends the value alone.
+10. A module's adapter declares its database, `ModuleDatabase`, with its scripts embedded as resources, and
+    registers it with `AddStellaegisModuleDatabase`; its options take the form of `AddStellaegisOptions`, its HTTP
+    client the form of `AddStellaegisHttpClient`. None of it is required to build: it is what the family's modules
+    do at their next version.
 
 ### Added
 
@@ -98,6 +114,11 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
 - `ModuleCapability.OwnerIsolation` reads as a compatibility: the frame says what is true of the application, and a
   module is compatible with it rather than applying it identically. A module none of whose data belongs to an actor
   declares it from its core; one whose database isolates data an actor owns, from the adapter that holds the rule.
+
+### Removed
+
+- `ApplicationFrame.Confront` and `ConfrontStellaegisModules()`, deprecated in 4.1.0.
+- `UserFacingException(string message, ErrorType type, Exception? innerException)`, deprecated in 4.2.0.
 
 ## [4.3.0] — 2026-10-20
 

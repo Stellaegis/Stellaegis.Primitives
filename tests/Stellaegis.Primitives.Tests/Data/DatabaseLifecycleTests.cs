@@ -220,7 +220,7 @@ public class ModuleDatabaseTests
         var database = ModuleDatabase.SqlServer<WidgetsModule>("lcw");
 
         var exception = await Assert.ThrowsAsync<NotSupportedException>(() =>
-            DatabaseLifecycle.VerifyAsync([database], ApplicationFrame.SingleCompartment("acme"), (_, _) => Task.FromResult<DbConnection>(null!)));
+            DatabaseLifecycle.VerifyAsync([database], ApplicationFrame.SingleCompartment("acme"), (_, _) => Task.FromResult<DbConnection>(null!), TestContext.Current.CancellationToken));
         Assert.Contains("SqlServer", exception.Message);
     }
 }

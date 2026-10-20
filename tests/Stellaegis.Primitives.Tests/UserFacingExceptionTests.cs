@@ -47,22 +47,6 @@ public class UserFacingExceptionTests
         Assert.Equal("Document.NotFound", ex.Error.Code);
     }
 
-#pragma warning disable CS0618 // the former constructor, kept for 4.1 code
-    [Fact]
-    public void The_former_constructor_carries_no_code()
-    {
-        var ex = new UserFacingException("Document not found.", ErrorType.NotFound);
-
-        Assert.Equal(new Error(string.Empty, "Document not found.", ErrorType.NotFound), ex.Error);
-        Assert.Equal("Document not found.", ex.Message);
-    }
-
-    [Fact]
-    public void The_former_constructor_rejects_type_none()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new UserFacingException("Message.", ErrorType.None));
-    }
-#pragma warning restore CS0618
 
     private sealed class DocumentMissingException()
         : UserFacingException(Error.NotFound("Document.NotFound", "Document not found."));
