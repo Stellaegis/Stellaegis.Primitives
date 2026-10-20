@@ -7,9 +7,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [4.2.0] — 2026-10-20
+
 A managed exception carries a code, as an `Error` does, and a module's client reads it back from the HTTP answer.
 What leaves an HTTP answer is decided by its status: the message of a 4xx is sent, the message of a 5xx stays in
-the server's log outside Development, the code is always sent.
+the server's log outside Development, the code is always sent. The four packages move together to 4.2.0.
 
 ### Added
 
@@ -282,7 +284,8 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
-[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v3.0.0...v4.0.0
 [3.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v2.0.0...v3.0.0
