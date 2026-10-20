@@ -107,12 +107,22 @@ public interface ISessionProbe
 {
     Task<(string? Space, string? Actor)> ReadAsync(CancellationToken cancellationToken = default);
 
+    Task<string?> ReadViaAsync(CancellationToken cancellationToken = default);
+
     Task SetSpaceAsync(string value, CancellationToken cancellationToken = default);
 }
 
-internal sealed class SqlSessionProbe(DbConnection connection, Func<DbTransaction?> transaction, string readSql, string setSql)
+internal sealed class SqlSessionProbe(DbConnection connection, Func<DbTransaction?> transaction, string readSql, string setSql, string readViaSql)
     : ISessionProbe
 {
+    public async Task<string?> ReadViaAsync(CancellationToken cancellationToken = default)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction();
+        command.CommandText = readViaSql;
+        return await command.ExecuteScalarAsync(cancellationToken) is string via ? via : null;
+    }
+
     public async Task<(string? Space, string? Actor)> ReadAsync(CancellationToken cancellationToken = default)
     {
         await using var command = connection.CreateCommand();
@@ -146,6 +156,10 @@ public sealed class SessionContextTests
     private const string SqlServerRead =
         "select cast(session_context(N'stellaegis.space') as nvarchar(63)), cast(session_context(N'stellaegis.actor') as nvarchar(128))";
 
+    private const string PostgreSqlReadVia = "select nullif(current_setting('stellaegis.actor_via', true), '')";
+
+    private const string SqlServerReadVia = "select cast(session_context(N'stellaegis.actor_via') as nvarchar(128))";
+
     private static string ConnectionString(string variable)
     {
         var value = Environment.GetEnvironmentVariable(variable);
@@ -156,13 +170,13 @@ public sealed class SessionContextTests
     private static AdoSpaceUnitOfWorkFactory<WidgetsDatabase> PostgreSql() => new(
         (_, _) => Task.FromResult<DbConnection>(new NpgsqlConnection(ConnectionString("STELLAEGIS_TEST_POSTGRESQL"))),
         new RepositoryRegistry<WidgetsDatabase>().Add<ISessionProbe>((connection, transaction) =>
-            new SqlSessionProbe(connection, transaction, PostgreSqlRead, "select set_config('stellaegis.space', '{value}', false)")),
+            new SqlSessionProbe(connection, transaction, PostgreSqlRead, "select set_config('stellaegis.space', '{value}', false)", PostgreSqlReadVia)),
         SessionContext.PostgreSql);
 
     private static AdoSpaceUnitOfWorkFactory<WidgetsDatabase> SqlServer() => new(
         (_, _) => Task.FromResult<DbConnection>(new SqlConnection(ConnectionString("STELLAEGIS_TEST_SQLSERVER"))),
         new RepositoryRegistry<WidgetsDatabase>().Add<ISessionProbe>((connection, transaction) =>
-            new SqlSessionProbe(connection, transaction, SqlServerRead, "exec sp_set_session_context N'stellaegis.space', N'{value}'")),
+            new SqlSessionProbe(connection, transaction, SqlServerRead, "exec sp_set_session_context N'stellaegis.space', N'{value}'", SqlServerReadVia)),
         SessionContext.SqlServer);
 
     public static TheoryData<string> Engines => ["PostgreSql", "SqlServer"];
@@ -192,6 +206,24 @@ public sealed class SessionContextTests
         await uow.BeginAsync(Ct);
         Assert.Equal(("_shared", "job:trash-purge"), await uow.Repo<ISessionProbe>().ReadAsync(Ct));
         await uow.RollbackAsync(Ct);
+    }
+
+    // The acting party reaches the database only when there is one; a pooled connection does not keep it.
+    [Theory]
+    [MemberData(nameof(Engines))]
+    public async Task The_database_reads_who_acts_on_the_actors_behalf(string engine)
+    {
+        var factory = Factory(engine);
+        await using (var uow = await factory.OpenAsync(Compartment.Parse("acme"), Actor.Parse("jane").Through(Actor.Job("provision")), Ct))
+        {
+            Assert.Equal(("acme", "jane"), await uow.Repo<ISessionProbe>().ReadAsync(Ct));
+            Assert.Equal("job:provision", await uow.Repo<ISessionProbe>().ReadViaAsync(Ct));
+        }
+
+        await using (var uow = await factory.OpenAsync(Compartment.Parse("acme"), Actor.Parse("jane"), Ct))
+        {
+            Assert.Null(await uow.Repo<ISessionProbe>().ReadViaAsync(Ct));
+        }
     }
 
     [Fact]

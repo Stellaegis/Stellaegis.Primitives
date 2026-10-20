@@ -63,6 +63,55 @@ public class ActorTests
         => Assert.Equal("job:purge", $"{Actor.Parse("job:purge")}");
 
     [Fact]
+    public void A_job_is_named_after_the_identifier_rule()
+    {
+        Assert.Equal(Actor.Parse("job:tenants_purge"), Actor.Job("tenants_purge"));
+        Assert.Equal("job:purge", Actor.Job("purge").Value);
+        Assert.Throws<ArgumentException>(() => Actor.Job("trash-purge"));
+        Assert.Throws<ArgumentException>(() => Actor.Job("Purge"));
+    }
+
+    // Responsibility stays with the value; the acting party is a mention, compared like the rest.
+    [Fact]
+    public void An_actor_may_act_through_another()
+    {
+        var jane = Actor.Parse("jane");
+        var provisioning = jane.Through(Actor.Job("provision"));
+
+        Assert.Equal("jane", provisioning.Value);
+        Assert.Equal(Actor.Job("provision"), provisioning.Via);
+        Assert.Null(jane.Via);
+        Assert.Equal("jane", provisioning.ToString());
+        Assert.Equal(provisioning, Actor.Parse("jane").Through(Actor.Parse("job:provision")));
+        Assert.NotEqual(provisioning, jane);
+        Assert.NotEqual(provisioning.GetHashCode(), jane.GetHashCode());
+        Assert.Throws<ArgumentNullException>(() => jane.Through(null!));
+    }
+
+    [Fact]
+    public void Json_writes_an_object_when_someone_acts_on_behalf()
+    {
+        var provisioning = Actor.Parse("jane").Through(Actor.Parse("t_acme_app").Through(Actor.Job("provision")));
+
+        var json = JsonSerializer.Serialize(provisioning);
+
+        Assert.Equal("""{"value":"jane","via":{"value":"t_acme_app","via":"job:provision"}}""", json);
+        Assert.Equal(provisioning, JsonSerializer.Deserialize<Actor>(json));
+        Assert.Equal(Actor.Parse("jane"), JsonSerializer.Deserialize<Actor>("""{"value":"jane"}"""));
+        Assert.Equal(Actor.Parse("jane"), JsonSerializer.Deserialize<Actor>("""{"value":"jane","via":null,"other":1}"""));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Actor>("""{"via":"job:purge"}"""));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Actor>("""{"value":" jane"}"""));
+    }
+
+    [Fact]
+    public void A_dictionary_key_carries_the_value_alone()
+    {
+        var json = JsonSerializer.Serialize(new Dictionary<Actor, int> { [Actor.Parse("jane").Through(Actor.Job("purge"))] = 1 });
+
+        Assert.Equal("""{"jane":1}""", json);
+    }
+
+    [Fact]
     public void Json_reads_and_writes_a_string()
     {
         var json = JsonSerializer.Serialize(Actor.Parse("jane"));

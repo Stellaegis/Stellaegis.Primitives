@@ -228,6 +228,29 @@ public class RequestContextTests
         Assert.All(answers, answer => Assert.Equal(answer.Expected, answer.Actual));
     }
 
+    [Theory]
+    [InlineData("t_acme_app", "jane|t_acme_app")]
+    [InlineData("""{"sub":"t_acme_app","act":{"sub":"gateway"}}""", "jane|t_acme_app")]
+    public async Task Who_acts_on_the_actors_behalf_comes_from_the_act_claim(string act, string expected)
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddStellaegisFrame(Acme).AddStellaegisRequestContext(c => c.ViaFromClaim("act")),
+            routes => routes.MapGet("/echo", (IRequestContext context) => $"{context.Actor.Value}|{context.Actor.Via?.Value ?? "-"}"));
+        var client = app.GetTestClient();
+
+        Assert.Equal(expected, await SendAsync(client, TestApp.Request("/echo", ("sub", "jane"), ("act", act))));
+        Assert.Equal("jane|-", await SendAsync(client, TestApp.Request("/echo", ("sub", "jane"))));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SendAsync(client, TestApp.Request("/echo", ("sub", "jane"), ("act", " "))));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SendAsync(client, TestApp.Request("/echo", ("sub", "jane"), ("act", "{\"iss\":\"x\"}"))));
+    }
+
+    private static async Task<string> SendAsync(HttpClient client, HttpRequestMessage request)
+    {
+        var response = await client.SendAsync(request, Ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync(Ct);
+    }
+
     [Fact]
     public async Task A_compartment_binds_as_a_route_parameter()
     {

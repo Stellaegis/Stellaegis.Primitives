@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
@@ -17,6 +18,7 @@ public sealed class RequestContextBuilder
 
     private Func<HttpContext, Compartment?>? _compartment;
     private Func<HttpContext, Actor?> _actor = http => ReadActorClaim(http, DefaultActorClaims);
+    private Func<HttpContext, Actor?>? _via;
 
     internal RequestContextBuilder()
     {
@@ -78,7 +80,23 @@ public sealed class RequestContextBuilder
         return this;
     }
 
-    internal RequestContextSettings Build() => new(_compartment, _actor);
+    /// <summary>
+    /// Reads who acts on the actor's behalf from a claim of the authenticated user — <c>act</c> after an OAuth
+    /// token exchange (RFC 8693), whose value is the acting party's identifier, or a JSON object naming it in
+    /// <c>sub</c>. Without the claim, nobody does: the actor acts for itself.
+    /// </summary>
+    /// <remarks>
+    /// A claim present and not naming a valid <see cref="Actor"/> fails the request, as the actor claim does: the
+    /// mention would otherwise be lost in silence.
+    /// </remarks>
+    public RequestContextBuilder ViaFromClaim(string claimType)
+    {
+        var type = Guard.NotWhiteSpace(claimType);
+        _via = http => ReadViaClaim(http, type);
+        return this;
+    }
+
+    internal RequestContextSettings Build() => new(_compartment, _actor, _via);
 
     private RequestContextBuilder SetCompartment(Func<HttpContext, Compartment?> source)
     {
@@ -86,6 +104,35 @@ public sealed class RequestContextBuilder
             throw new InvalidOperationException("A request context has a single compartment source, and one is already declared.");
         _compartment = source;
         return this;
+    }
+
+    private static Actor? ReadViaClaim(HttpContext http, string claimType)
+    {
+        if (http.User.Identity?.IsAuthenticated != true || http.User.FindFirst(claimType)?.Value is not { } value)
+            return null;
+
+        var identifier = value.TrimStart().StartsWith('{') ? SubjectOf(value, claimType) : value;
+        return Actor.TryParse(identifier, out var via)
+            ? via
+            : throw new InvalidOperationException($"The {claimType} claim of the authenticated user does not name a valid actor.");
+    }
+
+    // The act claim of a token exchange is an object: { "sub": "client" }, possibly nested in another act.
+    private static string? SubjectOf(string json, string claimType)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("sub", out var subject)
+                && subject.ValueKind == JsonValueKind.String
+                    ? subject.GetString()
+                    : null;
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException($"The {claimType} claim of the authenticated user is not a JSON object naming a sub.", exception);
+        }
     }
 
     private static Actor? ReadActorClaim(HttpContext http, string[] claimTypes)
@@ -109,4 +156,5 @@ public sealed class RequestContextBuilder
 /// </summary>
 internal sealed record RequestContextSettings(
     Func<HttpContext, Compartment?>? Compartment,
-    Func<HttpContext, Actor?> Actor);
+    Func<HttpContext, Actor?> Actor,
+    Func<HttpContext, Actor?>? Via);

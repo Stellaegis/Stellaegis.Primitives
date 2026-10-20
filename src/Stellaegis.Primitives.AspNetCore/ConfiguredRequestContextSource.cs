@@ -27,5 +27,12 @@ internal sealed class ConfiguredRequestContextSource(IHttpContextAccessor access
         }
     }
 
-    public Actor Actor => _actor ??= settings.Actor(RequestContext.Current(accessor)) ?? anonymous;
+    public Actor Actor => _actor ??= Read();
+
+    private Actor Read()
+    {
+        var http = RequestContext.Current(accessor);
+        var actor = settings.Actor(http) ?? anonymous;
+        return settings.Via?.Invoke(http) is { } via ? actor.Through(via) : actor;
+    }
 }

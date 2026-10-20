@@ -170,8 +170,22 @@ on the code that reads the input: converting a user-typed value to lowercase is 
 An actor comes from a token whose format is not under your control, so it follows no grammar: 1 to 128
 characters, no control character, no leading or trailing whitespace. Use a stable, opaque identifier — the
 `sub` of a token, never an e-mail address or a name: modules copy it into every record they write, and
-deleting an account does not remove it from there. It does not tell users, machines
-and scheduled tasks apart. If your records need to, prefix the value, as `job:purge` does.
+deleting an account does not remove it from there. It does not tell users, machines and scheduled tasks apart; a
+prefix does, which the named factories write: `Actor.Job("purge")` is `job:purge`, the actor of a piece of work
+done outside requests.
+
+Who answers for an operation and who performs it are not always the same: a client acting for a user after an
+OAuth token exchange, a worker running what a user asked for. The actor stays the one who answers, and the other is
+a mention, `Via`:
+
+```csharp
+var provisioning = Actor.Parse("jane").Through(Actor.Job("provision"));   // jane answers; the job acts for her
+provisioning.Value;   // "jane" — what the records carry
+provisioning.Via;     // job:provision
+```
+
+A record carries the value; an adapter that wants the mention adds a column of its own. As JSON, an actor is a
+plain string, or an object `{ "value": …, "via": … }` when someone acts on its behalf — both are read back.
 
 Both types implement `IParsable<T>`: `Parse` throws a `FormatException` on an invalid value, `TryParse`
 returns `false`. Both serialize to JSON as a plain string, also as a dictionary key, with reflection or
@@ -293,8 +307,9 @@ opens in that compartment.
 | SQL Server, `SessionContext.SqlServer` | `sp_set_session_context`, read-only | `SESSION_CONTEXT(N'stellaegis.space')`, `SESSION_CONTEXT(N'stellaegis.actor')` |
 | PostgreSQL, `SessionContext.PostgreSql` | `set_config(…, false)` | `current_setting('stellaegis.space', true)`, `current_setting('stellaegis.actor', true)` |
 
-The space is `space.ToSegment()` — the compartment, or `_shared` — and the actor its value. A session
-without them sees nothing, so a policy written that way fails closed. `SessionContext.None` sets nothing,
+The space is `space.ToSegment()` — the compartment, or `_shared` — and the actor its value. When someone acts on
+the actor's behalf, `Actor.Via`, a third key carries it, `stellaegis.actor_via`; otherwise the key is absent. A
+session without space and actor sees nothing, so a policy written that way fails closed. `SessionContext.None` sets nothing,
 for an engine without a session context such as SQLite.
 
 Both engines reset a pooled connection before its next user, so a context never outlives its unit of
@@ -582,7 +597,8 @@ builder.Services.AddStellaegisRequestContext();
 
 With many, the request context declares exactly one compartment source — `CompartmentFromRoute`,
 `CompartmentFromClaim`, or `CompartmentFrom` with a function of the `HttpContext` — and, in either form, an
-optional actor source, `ActorFromClaim` or `ActorFrom`:
+optional actor source, `ActorFromClaim` or `ActorFrom`, and an optional source of who acts on the actor's behalf,
+`ViaFromClaim("act")`, read from the `act` claim of a token exchange as its value or as the `sub` of its object:
 
 ```csharp
 builder.Services.AddStellaegisFrame(ApplicationFrame.ManyCompartments());

@@ -5,7 +5,8 @@ namespace Stellaegis.Primitives.Data;
 /// <summary>
 /// How a unit of work opened in a space tells the database who works where: it sets
 /// <see cref="SpaceKey"/> to <see cref="Space.ToSegment"/> and <see cref="ActorKey"/> to the actor, for the
-/// session, as soon as the connection is open — with or without a transaction.
+/// session, as soon as the connection is open — with or without a transaction. When someone acts on the actor's
+/// behalf, <see cref="Actor.Via"/>, it sets <see cref="ViaKey"/> too; otherwise the key is absent.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,14 +29,19 @@ public sealed class SessionContext
     /// <summary>The session key holding the actor.</summary>
     public const string ActorKey = "stellaegis.actor";
 
+    /// <summary>The session key holding who acts on the actor's behalf, set only when someone does.</summary>
+    public const string ViaKey = "stellaegis.actor_via";
+
     private readonly string _name;
     private readonly string? _sql;
+    private readonly string? _sqlWithVia;
     private readonly Action<DbConnection>? _check;
 
-    private SessionContext(string name, string? sql, Action<DbConnection>? check)
+    private SessionContext(string name, string? sql, string? sqlWithVia, Action<DbConnection>? check)
     {
         _name = name;
         _sql = sql;
+        _sqlWithVia = sqlWithVia;
         _check = check;
     }
 
@@ -47,6 +53,9 @@ public sealed class SessionContext
         "SQL Server",
         $"exec sp_set_session_context @key = N'{SpaceKey}', @value = @space, @read_only = 1; "
         + $"exec sp_set_session_context @key = N'{ActorKey}', @value = @actor, @read_only = 1;",
+        $"exec sp_set_session_context @key = N'{SpaceKey}', @value = @space, @read_only = 1; "
+        + $"exec sp_set_session_context @key = N'{ActorKey}', @value = @actor, @read_only = 1; "
+        + $"exec sp_set_session_context @key = N'{ViaKey}', @value = @via, @read_only = 1;",
         check: null);
 
     /// <summary>
@@ -56,13 +65,14 @@ public sealed class SessionContext
     public static SessionContext PostgreSql { get; } = new(
         "PostgreSQL",
         $"select set_config('{SpaceKey}', @space, false), set_config('{ActorKey}', @actor, false)",
+        $"select set_config('{SpaceKey}', @space, false), set_config('{ActorKey}', @actor, false), set_config('{ViaKey}', @via, false)",
         RefuseNoResetOnClose);
 
     /// <summary>
     /// Sets nothing: an engine without a session context, such as SQLite, or an application whose database reads
     /// none. A database that expects the context and finds none sees nothing.
     /// </summary>
-    public static SessionContext None { get; } = new("none", sql: null, check: null);
+    public static SessionContext None { get; } = new("none", sql: null, sqlWithVia: null, check: null);
 
     /// <summary>The engine the context is written for.</summary>
     public override string ToString() => _name;
@@ -76,9 +86,11 @@ public sealed class SessionContext
             return;
 
         await using var command = connection.CreateCommand();
-        command.CommandText = _sql;
+        command.CommandText = actor.Via is null ? _sql : _sqlWithVia;
         AddParameter(command, "space", space.ToSegment());
         AddParameter(command, "actor", actor.Value);
+        if (actor.Via is { } via)
+            AddParameter(command, "via", via.Value);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 

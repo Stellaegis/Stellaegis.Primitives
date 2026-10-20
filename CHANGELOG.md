@@ -43,6 +43,12 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
   by its nature; `SharedSpaceAcceptance` on a group of routes or a controller, to differ from the module.
 - `ModuleCapability.RequiresSharedSpace`: the validation refuses such a parameter in an application without a
   shared space.
+- `Actor.Via` and `Actor.Through(via)`: who acts on the actor's behalf — the acting party of an OAuth token
+  exchange, the worker running what a user asked for. Responsibility stays with `Value`, which the records carry;
+  the mention travels as JSON (`{ "value": …, "via": … }`, a plain string without one), reaches the database as
+  the session key `stellaegis.actor_via` when there is one, and is read from the `act` claim with
+  `ViaFromClaim("act")` on the request context. `Actor.Job(name)` names a piece of work outside requests,
+  `job:purge`.
 - `ActsOnSpaces()` (`Stellaegis.Primitives.AspNetCore`): a module declares it on its administration routes, which
   take their space as an object — purging a compartment, reading a secret of any compartment by its path. On such a
   route `IRequestContext.Space` fails and `Actor` stays; the startup check refuses it in the shared space, without a
@@ -60,6 +66,8 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
   `OperationRequirement`, and handler detection looks for handlers of it.
 - **Breaking.** `RequireRequestContext` takes a `SharedSpaceAcceptance` instead of a `bool`, and
   `RequiresRequestContextAttribute.AcceptsSharedSpace` becomes `SharedSpace`.
+- **Breaking.** Two actors are equal when their values and their acting parties are; an actor with an acting party
+  serializes as an object. A Dapper parameter still sends the value alone.
 - `ModuleCapability.OwnerIsolation` reads as a compatibility: the frame says what is true of the application, and a
   module is compatible with it rather than applying it identically. A module none of whose data belongs to an actor
   declares it from its core; one whose database isolates data an actor owns, from the adapter that holds the rule.

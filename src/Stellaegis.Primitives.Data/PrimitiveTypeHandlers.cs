@@ -13,7 +13,9 @@ namespace Stellaegis.Primitives.Data;
 /// </summary>
 /// <remarks>
 /// A parameter is sent exactly as Dapper sends a <see cref="string"/> — <see cref="DbType.String"/>, size
-/// 4000 — so replacing a string by one of these types leaves the SQL unchanged. A <c>NULL</c> column reads as
+/// 4000 — so replacing a string by one of these types leaves the SQL unchanged. An actor is sent as its value,
+/// who answers for the operation; a store that records who acted on its behalf, <see cref="Actor.Via"/>, adds a
+/// column of its own and sends <c>actor.Via?.Value</c>. A <c>NULL</c> column reads as
 /// <see langword="null"/>; a value that breaks the type's rule fails the read — Dapper wraps the
 /// <see cref="FormatException"/> in a <see cref="DataException"/> naming the column — since it means
 /// corrupted data or a missing database constraint.
