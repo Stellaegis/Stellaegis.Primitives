@@ -7,8 +7,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [4.3.0] — 2026-10-20
+
 A module written with MVC controllers declares with attributes what a module of route groups declares on its group,
-and the host maps every controller with a single `MapControllers()`.
+and the host maps every controller with a single `MapControllers()`. The four packages move together to 4.3.0.
 
 ### Added
 
@@ -300,7 +302,8 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
-[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.3.0...HEAD
+[4.3.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v3.0.0...v4.0.0
