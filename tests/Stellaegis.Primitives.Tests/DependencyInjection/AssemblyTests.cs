@@ -119,6 +119,71 @@ public class AssemblyTests
         Assert.Equal([ReadDocuments, PurgeDocuments], provider.GetStellaegisModule<DocumentsModule>()!.Operations);
     }
 
+    private sealed class Registry(params Compartment[] compartments) : ICompartmentDirectory
+    {
+        public async IAsyncEnumerable<Compartment> ListAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            foreach (var compartment in compartments)
+                yield return compartment;
+        }
+    }
+
+    private static async Task<List<string>> ListAsync(IServiceProvider provider)
+    {
+        var listed = new List<string>();
+        await foreach (var compartment in provider.GetRequiredService<ICompartmentDirectory>().ListAsync(TestContext.Current.CancellationToken))
+            listed.Add(compartment.Value);
+        return listed;
+    }
+
+    // With a single compartment the frame lists it; with many the application does; without, nothing does.
+    [Fact]
+    public async Task The_compartments_are_listed_by_the_frame_or_by_the_application()
+    {
+        using var single = new ServiceCollection().AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme")).BuildServiceProvider();
+        single.ValidateStellaegisModules();
+        Assert.Equal(["acme"], await ListAsync(single));
+
+        using var many = new ServiceCollection().AddStellaegisFrame(ApplicationFrame.ManyCompartments())
+            .AddSingleton<ICompartmentDirectory>(new Registry(Compartment.Parse("acme"), Compartment.Parse("globex")))
+            .BuildServiceProvider();
+        many.ValidateStellaegisModules();
+        Assert.Equal(["acme", "globex"], await ListAsync(many));
+
+        using var manyWithout = new ServiceCollection().AddStellaegisFrame(ApplicationFrame.ManyCompartments()).BuildServiceProvider();
+        manyWithout.ValidateStellaegisModules();
+        Assert.Null(manyWithout.GetService<ICompartmentDirectory>());
+
+        using var none = new ServiceCollection().BuildServiceProvider();
+        none.ValidateStellaegisModules();
+        Assert.Null(none.GetService<ICompartmentDirectory>());
+    }
+
+    [Fact]
+    public void A_directory_that_disagrees_with_the_frame_is_refused()
+    {
+        var registry = new Registry(Compartment.Parse("acme"));
+
+        var besideSingle = Assert.Throws<InvalidOperationException>(() => new ServiceCollection()
+            .AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme"))
+            .AddSingleton<ICompartmentDirectory>(registry)
+            .BuildServiceProvider().ValidateStellaegisModules());
+        Assert.Contains("beside the one of the application frame", besideSingle.Message);
+
+        var withoutCompartments = Assert.Throws<InvalidOperationException>(() => new ServiceCollection()
+            .AddSingleton<ICompartmentDirectory>(registry)
+            .BuildServiceProvider().ValidateStellaegisModules());
+        Assert.Contains("has no compartments to list", withoutCompartments.Message);
+
+        var twice = Assert.Throws<InvalidOperationException>(() => new ServiceCollection()
+            .AddStellaegisFrame(ApplicationFrame.ManyCompartments())
+            .AddSingleton<ICompartmentDirectory>(registry)
+            .AddSingleton<ICompartmentDirectory>(registry)
+            .BuildServiceProvider().ValidateStellaegisModules());
+        Assert.Contains("2 compartment directories", twice.Message);
+    }
+
     [Fact]
     public void A_capability_or_a_parameter_for_a_module_nothing_declares_is_refused()
     {

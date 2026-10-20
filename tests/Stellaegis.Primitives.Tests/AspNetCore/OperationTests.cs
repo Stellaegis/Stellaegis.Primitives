@@ -221,13 +221,61 @@ public class OperationTests
             routes =>
             {
                 routes.MapNotesEndpoints().RequireAuthorization().AllowAnyResource();
-                routes.MapGroup("/admin/notes").BelongsTo<NotesModule>().RequireRequestContext()
+                routes.MapGroup("/admin/notes").BelongsTo<NotesModule>().RequireRequestContext().ActsOnSpaces()
                     .MapDelete("/compartments/{compartment}", () => "purged").WithMetadata(Purge).LoadsNoResource()
                     .AllowAnonymous();
             });
 
         var response = await app.GetTestClient().DeleteAsync("/admin/notes/compartments/acme", Ct);
         Assert.Equal("purged", await response.Content.ReadAsStringAsync(Ct));
+    }
+
+    // A route acting on spaces reads its object from its path, and the actor from the context; the context has no space.
+    [Fact]
+    public async Task A_route_acting_on_spaces_has_an_actor_and_no_space()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services.AddNotes().AddAuthorization(),
+            routes => routes.MapGroup("/admin/notes").BelongsTo<NotesModule>().RequireRequestContext().ActsOnSpaces().AllowAnonymous()
+                .MapDelete("/compartments/{compartment}", (Compartment compartment, IRequestContext context) =>
+                {
+                    var exception = Assert.Throws<InvalidOperationException>(() => context.Space);
+                    Assert.Contains("acts on spaces", exception.Message);
+                    return $"{compartment} purged by {context.Actor}";
+                }).WithMetadata(Purge).LoadsNoResource());
+
+        var response = await app.GetTestClient().SendAsync(TestApp.Request(HttpMethod.Delete, "/admin/notes/compartments/globex", ("sub", "jane")), Ct);
+        Assert.Equal("globex purged by jane", await response.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task A_route_acting_on_spaces_is_never_in_the_shared_space()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services
+                .AddNotes(ApplicationFrame.ManyCompartments().WithSharedSpace(), c => c.CompartmentFromRoute("org"))
+                .AddAuthorization(),
+            routes => routes.MapGroup("/admin/notes").BelongsTo<NotesModule>().RequireRequestContext(SharedSpaceAcceptance.Accepted)
+                .ActsOnSpaces().InSharedSpace().AllowAnonymous()
+                .MapDelete("/compartments/{compartment}", () => "purged").WithMetadata(Purge).LoadsNoResource()));
+
+        Assert.Contains("/admin/notes/compartments/{compartment} (mapped in the shared space)", exception.Message);
+    }
+
+    [Fact]
+    public async Task A_route_acting_on_spaces_belongs_to_a_module_and_carries_an_operation()
+    {
+        var orphan = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddNotes().AddAuthorization(),
+            routes => routes.MapGroup("/admin").RequireRequestContext().ActsOnSpaces().AllowAnonymous()
+                .MapDelete("/compartments/{compartment}", () => "purged").LoadsNoResource()));
+        Assert.Contains("(no module declared)", orphan.Message);
+
+        var unlabelled = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddNotes().AddAuthorization(),
+            routes => routes.MapGroup("/admin/notes").BelongsTo<NotesModule>().RequireRequestContext().ActsOnSpaces().AllowAnonymous()
+                .MapDelete("/compartments/{compartment}", () => "purged").LoadsNoResource()));
+        Assert.Contains("(no operation)", unlabelled.Message);
     }
 
     [Fact]

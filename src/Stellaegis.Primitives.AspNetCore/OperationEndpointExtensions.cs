@@ -74,6 +74,28 @@ public static class OperationEndpointExtensions
     }
 
     /// <summary>
+    /// Declares that these routes act <b>on</b> spaces rather than in one — purging a compartment, reading a secret of
+    /// any compartment by its path: the space is the object of the route, read from its path or its body, never
+    /// its context. A module declares it on its administration routes:
+    /// <code>
+    /// var admin = routes.MapGroup("/documents").BelongsTo&lt;DocumentsModule&gt;().RequireRequestContext().ActsOnSpaces();
+    /// admin.MapDelete("/compartments/{compartment}", ...).WithMetadata(Purge).LoadsNoResource();
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// On such a route, <see cref="IRequestContext.Space"/> fails — the route reads its object itself — and
+    /// <see cref="IRequestContext.Actor"/> stays. The startup check refuses it in the shared space, which is a place
+    /// and not an object, and requires of it a module and an operation, as of any labelled route. Who may call it
+    /// stays the application's decision, as everywhere.
+    /// </remarks>
+    public static TBuilder ActsOnSpaces<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.WithMetadata(ActsOnSpacesMetadata.Instance);
+    }
+
+    /// <summary>
     /// Declares that these routes load no resource — a purge acting on a compartment, a rendering of the request's
     /// own content: there is nothing to ask the authorization on. A module declares it on such a route, and the
     /// startup check requires of it neither a handler for the resources nor <c>AllowAnyResource</c>.
@@ -90,6 +112,16 @@ public static class OperationEndpointExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder.WithMetadata(LoadsNoResourceMetadata.Instance);
+    }
+}
+
+/// <summary>The metadata <see cref="OperationEndpointExtensions.ActsOnSpaces{TBuilder}"/> places on a route.</summary>
+internal sealed class ActsOnSpacesMetadata
+{
+    public static readonly ActsOnSpacesMetadata Instance = new();
+
+    private ActsOnSpacesMetadata()
+    {
     }
 }
 

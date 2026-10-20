@@ -43,6 +43,13 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
   by its nature; `SharedSpaceAcceptance` on a group of routes or a controller, to differ from the module.
 - `ModuleCapability.RequiresSharedSpace`: the validation refuses such a parameter in an application without a
   shared space.
+- `ActsOnSpaces()` (`Stellaegis.Primitives.AspNetCore`): a module declares it on its administration routes, which
+  take their space as an object — purging a compartment, reading a secret of any compartment by its path. On such a
+  route `IRequestContext.Space` fails and `Actor` stays; the startup check refuses it in the shared space, without a
+  module, or without an operation.
+- `ICompartmentDirectory` (`Stellaegis.Primitives`): the compartments of an application, for the work that acts on
+  each of them outside a request. `AddStellaegisFrame` registers it for a single compartment; an application with
+  many registers its own; the validation refuses one beside the frame's, or in an application without compartments.
 - `OperationRequirement` (`Stellaegis.Primitives.AspNetCore`): the operation of a route as the requirement checked on
   a resource.
 - The startup check refuses a route labelled with an operation its module does not declare.

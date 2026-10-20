@@ -16,7 +16,9 @@ public static class StellaegisServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the application's frame, readable as an <see cref="ApplicationFrame"/> singleton. Without one,
-    /// the application is <see cref="ApplicationFrame.WithoutCompartments"/>.
+    /// the application is <see cref="ApplicationFrame.WithoutCompartments"/>. With a single compartment, the frame
+    /// also registers the <see cref="ICompartmentDirectory"/>, which lists that one compartment; with many, the
+    /// application registers its own.
     /// </summary>
     /// <exception cref="InvalidOperationException">A frame is already registered.</exception>
     public static IServiceCollection AddStellaegisFrame(this IServiceCollection services, ApplicationFrame frame)
@@ -29,6 +31,8 @@ public static class StellaegisServiceCollectionExtensions
                 "An application frame is already registered: an application declares its frame once, in code its hosts share.");
         }
         services.AddSingleton(frame);
+        if (frame.Compartments == CompartmentCount.Single)
+            services.AddSingleton<ICompartmentDirectory>(new FixedCompartmentDirectory(frame.FixedCompartment!));
         return services;
     }
 
@@ -70,6 +74,19 @@ public static class StellaegisServiceCollectionExtensions
         Guard.NotNull(parameter);
         services.AddSingleton(new ModuleContribution(typeof(TModule), NameRules.ModuleNameOf<TModule>(), null, null, parameter));
         return services;
+    }
+}
+
+/// <summary>The directory of an application with a single compartment: the frame's constant, listed once.</summary>
+internal sealed class FixedCompartmentDirectory(Compartment compartment) : ICompartmentDirectory
+{
+    public Compartment Compartment { get; } = compartment;
+
+    public async IAsyncEnumerable<Compartment> ListAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await Task.CompletedTask;
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return Compartment;
     }
 }
 

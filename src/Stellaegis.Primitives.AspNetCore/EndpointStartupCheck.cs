@@ -13,7 +13,8 @@ namespace Stellaegis.Primitives.AspNetCore;
 /// (<see cref="ApplicationFrame.Validate"/>); when the request context disagrees with the frame; when a route
 /// belongs to a module nothing declares, is labelled with an operation its module does not declare, or reads the
 /// request context while its module is declared without compartments; when a route is in the shared space of an application without one; when two routes share a name; when two module types carry the same name; when a route is
-/// in the shared space without a declaration accepting it; when a route labelled with an <see cref="Operation"/>
+/// in the shared space without a declaration accepting it; when a route acting on spaces is in the shared space,
+/// belongs to no module or carries no operation; when a route labelled with an <see cref="Operation"/>
 /// belongs to no module; when it declares no authorization — neither a requirement nor
 /// <c>AllowAnonymous</c>; when it would refuse every resource — no authorization handler for operations, and no
 /// <c>AllowAnyResource</c>; or when it requires a policy that does not exist.
@@ -50,6 +51,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         CheckDeclaredOperations(endpoints, modules);
         CheckFrame(endpoints, frame);
         CheckSharedSpace(endpoints, modules);
+        CheckSpacesRoutes(endpoints);
         CheckOperations(services, endpoints);
     };
 
@@ -254,6 +256,30 @@ internal sealed class EndpointStartupCheck : IStartupFilter
                 + "and a group of routes of your own with RequireRequestContext(SharedSpaceAcceptance.Accepted).");
         }
     }
+
+    // A route acting on spaces takes its space as an object: the shared space, a place, has nothing to give it; and
+    // it is a route of a module, labelled, so that the catalogue and the authorization see it as any other.
+    private static void CheckSpacesRoutes(IEnumerable<Endpoint> all)
+    {
+        var faulty = all
+            .Where(endpoint => endpoint.Metadata.GetMetadata<ActsOnSpacesMetadata>() is not null)
+            .Select(endpoint => (Endpoint: endpoint, Reason: SpacesRouteFault(endpoint)))
+            .Where(acting => acting.Reason is not null)
+            .ToList();
+        if (faulty.Count > 0)
+        {
+            var described = string.Join(", ", faulty.Select(acting => $"{acting.Endpoint.DisplayName} ({acting.Reason})"));
+            throw new InvalidOperationException(
+                $"These routes act on spaces, and their declarations do not hold: {described}. A route acting on spaces "
+                + "belongs to a module, carries an operation, and is never mapped InSharedSpace(): its space is its object.");
+        }
+    }
+
+    private static string? SpacesRouteFault(Endpoint endpoint)
+        => endpoint.Metadata.GetMetadata<SharedSpaceMetadata>() is not null ? "mapped in the shared space"
+            : endpoint.GetModule() is null ? "no module declared"
+            : endpoint.GetOperation() is null ? "no operation"
+            : null;
 
     private static string? SharedSpaceRefusal(Endpoint endpoint, IReadOnlyDictionary<Type, ModuleDeclaration> declared)
     {

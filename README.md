@@ -709,6 +709,7 @@ Administration is not a kind: it is an audience, and a module maps its administr
 | Who may call a route | the application | `.RequireAuthorization(...)`, a policy per operation, or `.AllowAnonymous()` — one of them, always |
 | Who may access a resource the route loads | the application | an authorization handler on the resource, or `.AllowAnyResource()` |
 | That a route loads no resource | the module | `.LoadsNoResource()` |
+| That a route acts on spaces, its space being its object | the module | `.ActsOnSpaces()`, on its administration routes |
 
 ### A policy per operation
 
@@ -757,6 +758,38 @@ any other, and `AuthorizeResourceAsync` fails on it.
 ⚠ The startup check reads the routes, not the database. When `AllowAnyResource()` relies on row-level
 security, the rule must be installed in the database: without it, every user reaching the routes accesses
 every resource, and nothing fails.
+
+### Acting on spaces
+
+A module's administration routes act **on** spaces rather than in one: purging a compartment, reading the secret
+of any compartment by its path. The space is the object of such a route, read from its path or its body, and the
+module declares it with `ActsOnSpaces()` on the group it maps its administration onto:
+
+```csharp
+public static RouteGroupBuilder MapDocumentsAdminEndpoints(this IEndpointRouteBuilder routes)
+{
+    var admin = routes.MapGroup("/documents").BelongsTo<DocumentsModule>().RequireRequestContext().ActsOnSpaces();
+    admin.MapDelete("/compartments/{compartment}", (Compartment compartment, IRequestContext context, DocumentService documents) =>
+        documents.PurgeAsync(compartment, context.Actor)).WithMetadata(DocumentOperations.Purge).LoadsNoResource();
+    return admin;
+}
+```
+
+On such a route, `IRequestContext.Space` fails and `Actor` stays. The startup check refuses it in the shared space,
+which is a place and not an object, and requires of it a module and an operation, as of any labelled route. Who may
+call it stays the application's decision: an application maps the administration of a module apart, under its own
+policy, or does not map it at all.
+
+The same work done outside a request — a purge scheduled for the compartments a tenant resigned from — lists them
+through `ICompartmentDirectory`, from `Stellaegis.Primitives`. With a single compartment, `AddStellaegisFrame`
+registers the directory itself, listing the frame's constant; with many, the application registers its own, the
+registry of its tenants; without compartments, there is none, and the validation refuses one registered anyway, or
+one registered beside the frame's.
+
+```csharp
+await foreach (var compartment in directory.ListAsync(ct))
+    await documents.PurgeCompartmentAsync(compartment, Actor.Parse("job:purge"), ct);
+```
 
 ### Checked at startup
 

@@ -69,9 +69,38 @@ public static class StellaegisServiceProviderExtensions
     /// services.ValidateStellaegisModules();
     /// </code>
     /// </summary>
-    /// <exception cref="InvalidOperationException">The frame and the modules do not hold together.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The frame and the modules do not hold together, or the compartment directory does not hold with the frame:
+    /// one registered by the application beside the frame's single compartment, or in an application without
+    /// compartments.
+    /// </exception>
     public static void ValidateStellaegisModules(this IServiceProvider services)
-        => services.GetStellaegisFrame().Validate(services.GetStellaegisModules());
+    {
+        var frame = services.GetStellaegisFrame();
+        frame.Validate(services.GetStellaegisModules());
+        CheckCompartmentDirectory(services, frame);
+    }
+
+    // The directory says which compartments exist, and so does the frame: the two cannot disagree.
+    private static void CheckCompartmentDirectory(IServiceProvider services, ApplicationFrame frame)
+    {
+        var directories = services.GetServices<ICompartmentDirectory>().ToList();
+        switch (frame.Compartments)
+        {
+            case CompartmentCount.None when directories.Count > 0:
+                throw new InvalidOperationException(
+                    $"A compartment directory is registered, and the application frame ({frame}) has no compartments to list: "
+                    + "remove it, or declare the application's compartments.");
+            case CompartmentCount.Single when directories.Count > 1 || directories[0] is not FixedCompartmentDirectory:
+                throw new InvalidOperationException(
+                    $"A compartment directory is registered beside the one of the application frame ({frame}): with a single "
+                    + "compartment the frame lists it itself, and nothing else does. Remove the registration, or declare "
+                    + "ApplicationFrame.ManyCompartments() and keep the directory of the application.");
+            case CompartmentCount.Many when directories.Count > 1:
+                throw new InvalidOperationException(
+                    $"{directories.Count} compartment directories are registered: an application lists its compartments once.");
+        }
+    }
 
     /// <summary>The former name of <see cref="ValidateStellaegisModules"/>, kept for 4.0 code.</summary>
     [Obsolete("Use ValidateStellaegisModules, its new name.")]
