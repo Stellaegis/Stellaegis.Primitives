@@ -7,6 +7,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+A module written with MVC controllers declares with attributes what a module of route groups declares on its group,
+and the host maps every controller with a single `MapControllers()`.
+
+### Added
+
+- `[BelongsTo<TModule>]`, `[RequiresRequestContext]` and `[Operation(typeof(T), nameof(T.Member))]`, on a controller or
+  an action: the module, the request context and the operation of its routes. The startup check reads them as it reads
+  a group's declarations, an attribute prevailing over a group, an action's over its controller's; an `[Operation]`
+  naming no operation fails the startup.
+- `ToActionResult()` for `Result` and `Result<TValue>`, for an action returning `IActionResult`: the failure is
+  answered as `ToHttpResult()` answers it.
+- `GetStellaegisModule<TModule>()`, in `Stellaegis.Primitives.DependencyInjection`: a module's declaration, from which
+  it reads the parameters the application turned on.
+- The startup check refuses a route that reads the request context when none is registered, as
+  `RequireRequestContext()` already did when a group was mapped.
+
 ## [4.2.0] — 2026-10-20
 
 A managed exception carries a code, as an `Error` does, and a module's client reads it back from the HTTP answer.

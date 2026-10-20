@@ -505,7 +505,8 @@ A module also declares its **capabilities**: what it can do. Some depend on the 
 module. An isolation by owner is a row-level security rule written for one engine, so the adapter for that
 engine declares it, and an adapter for another engine may not. A module may offer capabilities the
 application chooses to turn on, its **parameters**, with
-`AddStellaegisModuleParameter<TModule>(capability)`; the module documents the ones it publishes.
+`AddStellaegisModuleParameter<TModule>(capability)`; the module documents the ones it publishes, and reads
+those turned on from its declaration, `services.GetStellaegisModule<TModule>()?.Parameters`.
 
 These registrations, and `AddStellaegisFrame(AppFrame.Value)` for the frame, come from
 `Stellaegis.Primitives.DependencyInjection`.
@@ -804,6 +805,56 @@ if (await response.ReadErrorAsync(ct) is { } error)
 A status without a category of its own — 422, 429, a 502 from a proxy — reads as `Failure`. An answer that is
 not problem details, or whose message was hidden, reads with no code and the reason phrase as its message: the
 body is not copied, since nothing says what it holds.
+
+## Modules written with controllers
+
+Everything above is written for route groups, and works the same for MVC controllers. A controller states
+what a group states, with attributes, so that the host maps every controller with a single `MapControllers()`
+and each carries its own module:
+
+```csharp
+public static class NotesOperations
+{
+    public static readonly Operation Read = new("notes", "read", OperationKind.Read);
+}
+
+[ApiController, Route("notes/{org}")]
+[BelongsTo<NotesModule>]
+[RequiresRequestContext]
+public sealed class NotesController(INotes notes) : ControllerBase
+{
+    [HttpGet("{id}")]
+    [Operation(typeof(NotesOperations), nameof(NotesOperations.Read))]
+    public async Task<IActionResult> Get(string id, CancellationToken ct)
+    {
+        var result = await notes.GetAsync(id, ct);
+        return result.IsSuccess ? Ok(result.Value) : result.ToActionResult();
+    }
+}
+```
+
+| Attribute | Equivalent on a group |
+| --- | --- |
+| `[BelongsTo<TModule>]` | `BelongsTo<TModule>()` |
+| `[RequiresRequestContext(AcceptsSharedSpace = true)]` | `RequireRequestContext(acceptsSharedSpace: true)` |
+| `[Operation(typeof(T), nameof(T.Member))]` | `.WithMetadata(operation)` |
+
+The attributes go on a controller or on an action, and the declaration closest to an action counts: an
+action's over its controller's, an attribute over a group's. An attribute takes constants only, so
+`[Operation]` names the static member where the module declares the operation instead of holding it; a
+member that is missing, or holds no `Operation`, fails the startup check. The attributes are read by the
+startup check, which `AddStellaegisRequestContext()` or `AddStellaegisStartupCheck()` registers: without it,
+nothing reads them.
+
+What the application decides stays on its `MapControllers()` call — `RequireAuthorizationPerOperation`,
+`AllowAnyResource`, `InSharedSpace`, `AddErrorTranslation` — and applies to every controller. ⚠ Calling
+`MapControllers()` on a group with `BelongsTo<TModule>()` gives that module to every controller of the
+application that does not declare its own, and calling it on two groups maps every controller twice:
+ASP.NET Core does not map one module's controllers apart from the others'.
+
+`ToActionResult()` answers a `Result` from an action returning `IActionResult`: on success, 200 with the
+value formatted by MVC like the action's other answers, or 204; on failure, the problem details
+`ToHttpResult()` writes, with the same rules. An action returning `IResult` uses `ToHttpResult()` directly.
 
 ## License
 

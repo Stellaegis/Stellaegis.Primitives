@@ -44,6 +44,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
 
         var endpoints = services.GetService<EndpointDataSource>()?.Endpoints ?? [];
         CheckEndpointNames(endpoints);
+        CheckRequestContextRegistered(services, endpoints);
         CheckModules(endpoints);
         CheckDeclaredModules(endpoints, modules);
         CheckFrame(endpoints, frame);
@@ -89,7 +90,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
     {
         var declared = modules.ToDictionary(module => module.Module, module => module, EqualityComparer<Type>.Default);
         var routed = all
-            .Select(endpoint => (Endpoint: endpoint, Module: endpoint.Metadata.GetMetadata<ModuleMetadata>()))
+            .Select(endpoint => (Endpoint: endpoint, Module: endpoint.GetModule()))
             .Where(routed => routed.Module is not null)
             .ToList();
 
@@ -108,7 +109,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         }
 
         var contradicted = routed
-            .Where(routed => routed.Endpoint.Metadata.GetMetadata<RequestContextDeclaration>() is not null
+            .Where(routed => routed.Endpoint.Metadata.GetMetadata<RequiresRequestContextAttribute>() is not null
                 && !declared[routed.Module!.Type].IsCompartmented)
             .Select(routed => routed.Endpoint)
             .ToList();
@@ -121,8 +122,26 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         }
     }
 
-    // A route reading the request context in an application without compartments needs no check of its own:
-    // RequireRequestContext needs a registered request context, which CheckRequestContext refuses in such a frame.
+    // RequireRequestContext() checks the registration when the group is mapped; an attribute cannot, so the routes
+    // that declare it are checked here.
+    private static void CheckRequestContextRegistered(IServiceProvider services, IEnumerable<Endpoint> all)
+    {
+        if (services.GetService<IServiceProviderIsService>()?.IsService(typeof(IRequestContext)) != false)
+            return;
+
+        var reading = all.Where(endpoint => endpoint.Metadata.GetMetadata<RequiresRequestContextAttribute>() is not null).ToList();
+        if (reading.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"These routes read the request context, and none is registered: {DescribeWithModule(reading)}. "
+                + "Register one with the application's frame: "
+                + "builder.Services.AddStellaegisFrame(ApplicationFrame.SingleCompartment(\"acme\")).AddStellaegisRequestContext(), "
+                + "or a compartment source when the frame has many.");
+        }
+    }
+
+    // A route reading the request context in an application without compartments needs no check of its own: it needs
+    // a registered request context (CheckRequestContextRegistered), which CheckRequestContext refuses in such a frame.
     private static void CheckFrame(IEnumerable<Endpoint> all, ApplicationFrame frame)
     {
         if (frame.HasSharedSpace)
@@ -140,7 +159,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
 
     private static string DescribeWithModule(IEnumerable<Endpoint> endpoints)
         => string.Join(", ", endpoints.Select(endpoint =>
-            endpoint.Metadata.GetMetadata<ModuleMetadata>() is { } module
+            endpoint.GetModule() is { } module
                 ? $"{endpoint.DisplayName} ({module.Name})"
                 : endpoint.DisplayName));
 
@@ -168,7 +187,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
     private static void CheckModules(IEnumerable<Endpoint> all)
     {
         var homonyms = all
-            .Select(endpoint => endpoint.Metadata.GetMetadata<ModuleMetadata>())
+            .Select(endpoint => endpoint.GetModule())
             .OfType<ModuleMetadata>()
             .Distinct()
             .GroupBy(module => module.Name, StringComparer.Ordinal)
@@ -184,13 +203,13 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         }
 
         var orphans = all
-            .Where(endpoint => endpoint.GetOperation() is not null && endpoint.Metadata.GetMetadata<ModuleMetadata>() is null)
+            .Where(endpoint => endpoint.GetOperation() is not null && endpoint.GetModule() is null)
             .ToList();
         if (orphans.Count > 0)
         {
             throw new InvalidOperationException(
                 $"These routes are labelled with an Operation and belong to no module: {Describe(orphans)}. "
-                + "Declare the module on their group with BelongsTo<TModule>(), TModule being the IStellaegisModule "
+                + "Declare the module on their group with BelongsTo<TModule>(), or on their controller with [BelongsTo<TModule>], TModule being the IStellaegisModule "
                 + "that names it; an application's own routes declare a module of the application's.");
         }
     }
@@ -199,7 +218,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
     {
         var refused = all
             .Where(endpoint => endpoint.Metadata.GetMetadata<SharedSpaceMetadata>() is not null
-                && endpoint.Metadata.GetMetadata<RequestContextDeclaration>() is not { AcceptsSharedSpace: true })
+                && endpoint.Metadata.GetMetadata<RequiresRequestContextAttribute>() is not { AcceptsSharedSpace: true })
             .ToList();
         if (refused.Count > 0)
         {
@@ -212,9 +231,9 @@ internal sealed class EndpointStartupCheck : IStartupFilter
 
     private static string DescribeSharedSpace(IEnumerable<Endpoint> endpoints)
         => string.Join(", ", endpoints.Select(endpoint =>
-            endpoint.Metadata.GetMetadata<RequestContextDeclaration>() is null
+            endpoint.Metadata.GetMetadata<RequiresRequestContextAttribute>() is null
                 ? $"{endpoint.DisplayName} (no request context declared)"
-                : $"{endpoint.DisplayName} ({endpoint.Metadata.GetMetadata<ModuleMetadata>()?.Name ?? "its module"} does not accept the shared space)"));
+                : $"{endpoint.DisplayName} ({endpoint.GetModule()?.Name ?? "its module"} does not accept the shared space)"));
 
     private static void CheckOperations(IServiceProvider services, IEnumerable<Endpoint> all)
     {

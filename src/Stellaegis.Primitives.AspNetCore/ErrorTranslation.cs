@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -65,6 +66,22 @@ public static class ErrorTranslation
         => Guard.NotNull(result).IsSuccess ? TypedResults.Ok(result.Value) : new ErrorResult(result.Error!);
 
     /// <summary>
+    /// The answer of a result for a controller action: 204 on success, problem details on failure, written as
+    /// <see cref="ToHttpResult(Result)"/> writes them. Mixes with the action's own answers in an
+    /// <see cref="IActionResult"/>:
+    /// <code>return result.IsSuccess ? Ok(result.Value) : result.ToActionResult();</code>
+    /// </summary>
+    public static IActionResult ToActionResult(this Result result)
+        => Guard.NotNull(result).IsSuccess ? new NoContentResult() : new ErrorActionResult(result.Error!);
+
+    /// <summary>
+    /// The answer of a result for a controller action: 200 with the value on success, formatted by MVC like the
+    /// action's other answers; problem details on failure, as <see cref="ToActionResult(Result)"/>.
+    /// </summary>
+    public static IActionResult ToActionResult<TValue>(this Result<TValue> result)
+        => Guard.NotNull(result).IsSuccess ? new OkObjectResult(result.Value) : new ErrorActionResult(result.Error!);
+
+    /// <summary>
     /// Translates, on these routes, the exceptions meant for the caller: a <see cref="UserFacingException"/>
     /// answers its <see cref="UserFacingException.Error"/> as <see cref="ToHttpResult(Result)"/> does; an <see cref="ArgumentException"/>
     /// answers 400, its message hidden outside Development since a guard names an internal parameter. Any other
@@ -97,6 +114,14 @@ public static class ErrorTranslation
 
     private static bool IsDevelopment(HttpContext httpContext)
         => httpContext.RequestServices.GetService<IHostEnvironment>()?.IsDevelopment() == true;
+
+    /// <summary>A failed result for a controller action, answered as <see cref="ErrorResult"/> answers it.</summary>
+    private sealed class ErrorActionResult(Error error) : IActionResult, IStatusCodeActionResult
+    {
+        public int? StatusCode => error.Type.ToStatusCode();
+
+        public Task ExecuteResultAsync(ActionContext context) => new ErrorResult(error).ExecuteAsync(context.HttpContext);
+    }
 
     /// <summary>A failed result, translated when it executes, once the environment is known.</summary>
     private sealed class ErrorResult(Error error) : IResult, IStatusCodeHttpResult

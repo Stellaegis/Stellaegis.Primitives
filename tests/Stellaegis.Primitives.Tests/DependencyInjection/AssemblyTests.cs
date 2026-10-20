@@ -90,6 +90,17 @@ public class AssemblyTests
     }
 
     [Fact]
+    public void A_module_reads_the_parameters_the_application_turned_on()
+    {
+        using var provider = AddMessaging(new ServiceCollection())
+            .AddStellaegisModuleParameter<MessagingModule>(InheritSharedSpace)
+            .BuildServiceProvider();
+
+        Assert.Contains(InheritSharedSpace, provider.GetStellaegisModule<MessagingModule>()!.Parameters);
+        Assert.Null(provider.GetStellaegisModule<DocumentsModule>());
+    }
+
+    [Fact]
     public void A_capability_or_a_parameter_for_a_module_nothing_declares_is_refused()
     {
         var services = new ServiceCollection()

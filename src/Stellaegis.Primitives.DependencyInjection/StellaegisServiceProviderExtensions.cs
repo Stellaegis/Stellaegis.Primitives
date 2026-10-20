@@ -48,6 +48,19 @@ public static class StellaegisServiceProviderExtensions
     }
 
     /// <summary>
+    /// The declaration of <typeparamref name="TModule"/>, completed with the capabilities and parameters registered
+    /// for it, or <see langword="null"/> when nothing declares it. A module reads there the parameters the
+    /// application turned on:
+    /// <code>
+    /// var inherits = services.GetStellaegisModule&lt;MessagingModule&gt;()?.Parameters.Contains(InheritSharedSpace) == true;
+    /// </code>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">As <see cref="GetStellaegisModules"/>.</exception>
+    public static ModuleDeclaration? GetStellaegisModule<TModule>(this IServiceProvider services)
+        where TModule : IStellaegisModule
+        => services.GetStellaegisModules().SingleOrDefault(module => module.Module == typeof(TModule));
+
+    /// <summary>
     /// Validates the registered frame against the registered modules, and fails naming every module at fault
     /// (<see cref="ApplicationFrame.Validate"/>). An application without ASP.NET Core calls it once, right after
     /// building its services and before anything runs; an ASP.NET Core host calls it at startup by itself.

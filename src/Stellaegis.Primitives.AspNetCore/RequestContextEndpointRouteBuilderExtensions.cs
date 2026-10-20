@@ -34,6 +34,7 @@ public static class RequestContextEndpointRouteBuilderExtensions
     /// first request instead.
     /// </remarks>
     /// <exception cref="InvalidOperationException">No request context is registered.</exception>
+    /// <seealso cref="RequiresRequestContextAttribute"/>
     public static RouteGroupBuilder RequireRequestContext(this RouteGroupBuilder group, bool acceptsSharedSpace = false)
     {
         Guard.NotNull(group);
@@ -49,12 +50,31 @@ public static class RequestContextEndpointRouteBuilderExtensions
                 + "or a compartment source when the frame has many — AddStellaegisRequestContext(c => c.CompartmentFromRoute(\"org\")) — "
                 + "or AddStellaegisRequestContext<TSource>() with a source of its own.");
         }
-        return group.WithMetadata(new RequestContextDeclaration(acceptsSharedSpace));
+        return group.WithMetadata(new RequiresRequestContextAttribute { AcceptsSharedSpace = acceptsSharedSpace });
     }
 }
 
 /// <summary>
-/// The metadata <see cref="RequestContextEndpointRouteBuilderExtensions.RequireRequestContext"/> places on a route.
-/// The last one on a route — the declaration closest to it — is the one that counts.
+/// Declares that the actions of a controller, or one action, read the request context, and whether they accept
+/// the shared space — what <see cref="RequestContextEndpointRouteBuilderExtensions.RequireRequestContext"/>
+/// declares on a group of routes:
+/// <code>
+/// [ApiController, Route("notes"), BelongsTo&lt;NotesModule&gt;, RequiresRequestContext(AcceptsSharedSpace = true)]
+/// public sealed class NotesController : ControllerBase { /* ... */ }
+/// </code>
+/// The last declaration on a route — the closest to it, an action's over its controller's — is the one that counts.
 /// </summary>
-internal sealed record RequestContextDeclaration(bool AcceptsSharedSpace);
+/// <remarks>
+/// Unlike the group method, the attribute cannot check at mapping time that a request context is registered: the
+/// startup check refuses the route instead, naming it.
+/// </remarks>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = true)]
+public sealed class RequiresRequestContextAttribute : Attribute
+{
+    /// <summary>
+    /// Whether the routes may be mapped in the shared space. Refused by default: a route the application marks with
+    /// <see cref="SharedSpaceEndpointExtensions.InSharedSpace{TBuilder}"/> fails the startup unless the declaration
+    /// closest to it accepts the shared space.
+    /// </summary>
+    public bool AcceptsSharedSpace { get; init; }
+}

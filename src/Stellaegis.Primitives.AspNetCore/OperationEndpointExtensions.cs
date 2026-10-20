@@ -7,9 +7,13 @@ namespace Stellaegis.Primitives.AspNetCore;
 /// <summary>Reads the <see cref="Operation"/> of a route, and attaches the consumer's security to it.</summary>
 public static class OperationEndpointExtensions
 {
-    /// <summary>The operation the route is labelled with, or <see langword="null"/>.</summary>
+    /// <summary>
+    /// The operation the route is labelled with — directly, or by an <see cref="OperationAttribute"/> on its action or
+    /// controller, the closest label counting —, or <see langword="null"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">An <see cref="OperationAttribute"/> names no operation.</exception>
     public static Operation? GetOperation(this Endpoint endpoint)
-        => Guard.NotNull(endpoint).Metadata.GetMetadata<Operation>();
+        => OperationOf(Guard.NotNull(endpoint).Metadata);
 
     /// <summary>The operation of the route the request reached, or <see langword="null"/>.</summary>
     public static Operation? GetOperation(this HttpContext httpContext)
@@ -39,11 +43,19 @@ public static class OperationEndpointExtensions
 
         builder.Finally(endpoint =>
         {
-            if (endpoint.Metadata.OfType<Operation>().LastOrDefault() is { } operation)
+            if (OperationOf(endpoint.Metadata) is { } operation)
                 endpoint.Metadata.Add(new AuthorizeAttribute(policyFor(operation)));
         });
         return builder;
     }
+
+    private static Operation? OperationOf(IEnumerable<object> metadata)
+        => metadata.LastOrDefault(item => item is Operation or OperationAttribute) switch
+        {
+            Operation operation => operation,
+            OperationAttribute attribute => attribute.Operation,
+            _ => null,
+        };
 
     /// <summary>
     /// Declares that any user reaching these routes may access any resource they load: the module does not ask
