@@ -236,20 +236,27 @@ public class ControllerTests
     }
 
     [Fact]
-    public async Task The_shared_space_needs_a_controller_that_accepts_it()
+    public async Task The_shared_space_needs_a_module_or_a_controller_that_accepts_it()
     {
-        Task<WebApplication> StartInSharedSpace(Type controller) => StartAsync(
+        Task<WebApplication> StartInSharedSpace(Type controller, ModuleDeclaration notes) => StartAsync(
             services => services.AddStellaegisFrame(ApplicationFrame.ManyCompartments().WithSharedSpace())
                 .AddStellaegisRequestContext(c => c.CompartmentFromRoute("org"))
-                .AddStellaegisModule(CompartmentedNotes),
+                .AddStellaegisModule(notes),
             routes => routes.MapGroup("/shared").MapControllers().AllowAnonymous().AllowAnyResource().InSharedSpace(),
             controller);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => StartInSharedSpace(typeof(AttributedNotesController)));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => StartInSharedSpace(typeof(AttributedNotesController), CompartmentedNotes));
         Assert.Contains("does not accept the shared space", exception.Message);
 
-        await using var app = await StartInSharedSpace(typeof(SharedNotesController));
-        Assert.Equal("(shared)", await app.GetTestClient().GetStringAsync("/shared/snotes/space", Ct));
+        await using (var app = await StartInSharedSpace(typeof(AttributedNotesController), CompartmentedNotes.AcceptingSharedSpace()))
+        {
+            Assert.Equal("(shared)", await app.GetTestClient().GetStringAsync("/shared/anotes/space", Ct));
+        }
+
+        await using (var app = await StartInSharedSpace(typeof(SharedNotesController), CompartmentedNotes))
+        {
+            Assert.Equal("(shared)", await app.GetTestClient().GetStringAsync("/shared/snotes/space", Ct));
+        }
     }
 
     // Results for an action returning IActionResult
@@ -385,7 +392,7 @@ public sealed class AttributedNotesController : ControllerBase
 [ApiController]
 [Route("snotes")]
 [BelongsTo<NotesControllerModule>]
-[RequiresRequestContext(AcceptsSharedSpace = true)]
+[RequiresRequestContext(SharedSpace = SharedSpaceAcceptance.Accepted)]
 public sealed class SharedNotesController : ControllerBase
 {
     [HttpGet("space")]

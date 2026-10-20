@@ -142,10 +142,11 @@ public sealed class ApplicationFrame
     /// </code>
     /// </summary>
     /// <remarks>
-    /// Refused: a module declared twice, or two module types carrying the same name; a module with compartments
-    /// in an application without any; a module with compartments that cannot hold the isolation by owner the
-    /// frame declares; a parameter outside the module's capabilities. The guarantee stays the refusal at run time;
-    /// the validation turns it into a message, before the first user meets it.
+    /// Refused: a module declared twice, or two module types carrying the same name; a module that requires
+    /// compartments in an application without any; a module with compartments that is not compatible with the
+    /// isolation by owner the frame declares; a parameter outside the module's capabilities; a parameter that
+    /// supposes a shared space in an application without one. The guarantee stays the refusal at run time; the
+    /// validation turns it into a message, before the first user meets it.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="modules"/>, or one of them, is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The frame and the modules do not hold together.</exception>
@@ -167,15 +168,17 @@ public sealed class ApplicationFrame
 
         foreach (var module in declared.DistinctBy(module => module.Module))
         {
-            if (module.IsCompartmented && Compartments == CompartmentCount.None)
+            if (module.Compartments == ModuleCompartments.Required && Compartments == CompartmentCount.None)
             {
                 faults.Add($"{module.Name} has compartments, and the application has none: declare its compartment, "
                     + "ApplicationFrame.SingleCompartment(\"acme\"), named after the organization that owns the data");
             }
-            else if (module.IsCompartmented && OwnerIsolation && !module.Capabilities.Contains(ModuleCapability.OwnerIsolation))
+            else if (module.IsCompartmented && Compartments != CompartmentCount.None && OwnerIsolation
+                && !module.Capabilities.Contains(ModuleCapability.OwnerIsolation))
             {
-                faults.Add($"{module.Name} cannot hold the isolation by owner the application declares: register an "
-                    + "adapter of the module that holds it, or remove WithOwnerIsolation() from the frame");
+                faults.Add($"{module.Name} is not compatible with the isolation by owner the application declares: register an "
+                    + "adapter of the module that holds it, declare it from the module if none of its data belongs to an actor, "
+                    + "or remove WithOwnerIsolation() from the frame");
             }
 
             var outside = module.Parameters.Where(parameter => !module.Capabilities.Contains(parameter)).ToList();
@@ -183,6 +186,14 @@ public sealed class ApplicationFrame
             {
                 faults.Add($"{module.Name} is given {Plural(outside.Count, "a parameter", "parameters")} it has no capability for: "
                     + $"{string.Join(", ", outside)}");
+            }
+
+            var supposing = module.Parameters.Where(parameter => parameter.RequiresSharedSpace && module.Capabilities.Contains(parameter)).ToList();
+            if (!HasSharedSpace && supposing.Count > 0)
+            {
+                faults.Add($"{module.Name} is given {Plural(supposing.Count, "a parameter that supposes", "parameters that suppose")} "
+                    + $"a shared space, and the application has none: {string.Join(", ", supposing)}. Declare it, WithSharedSpace(), "
+                    + "or remove the parameter");
             }
         }
 

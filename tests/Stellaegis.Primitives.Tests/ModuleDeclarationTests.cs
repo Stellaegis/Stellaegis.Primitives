@@ -38,11 +38,61 @@ public class ModuleDeclarationTests
         var secrets = ModuleDeclaration.WithoutCompartments<SecretsModule>();
 
         Assert.True(documents.IsCompartmented);
+        Assert.Equal(ModuleCompartments.Required, documents.Compartments);
         Assert.Equal("documents", documents.Name);
         Assert.Equal(typeof(DocumentsModule), documents.Module);
         Assert.False(secrets.IsCompartmented);
+        Assert.Equal(ModuleCompartments.None, secrets.Compartments);
+        Assert.False(documents.AcceptsSharedSpace);
         Assert.Empty(secrets.Capabilities);
         Assert.Empty(secrets.Parameters);
+
+        var vault = ModuleDeclaration.OptionallyCompartmented<SecretsModule>();
+        Assert.True(vault.IsCompartmented);
+        Assert.Equal(ModuleCompartments.Optional, vault.Compartments);
+    }
+
+    [Fact]
+    public void A_module_accepts_the_shared_space_by_declaring_it()
+    {
+        Assert.True(ModuleDeclaration.Compartmented<DocumentsModule>().AcceptingSharedSpace().AcceptsSharedSpace);
+        Assert.True(ModuleDeclaration.OptionallyCompartmented<SecretsModule>().AcceptingSharedSpace().AcceptsSharedSpace);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => ModuleDeclaration.WithoutCompartments<SecretsModule>().AcceptingSharedSpace());
+        Assert.Contains("secrets is declared without compartments", exception.Message);
+    }
+
+    // The vault serves an application without compartments, by its assembly paths, and one with, by its spaces.
+    [Fact]
+    public void An_optionally_compartmented_module_fits_every_frame()
+    {
+        var vault = ModuleDeclaration.OptionallyCompartmented<SecretsModule>();
+
+        ApplicationFrame.WithoutCompartments.Validate([vault]);
+        ApplicationFrame.SingleCompartment("acme").Validate([vault]);
+        ApplicationFrame.ManyCompartments().WithSharedSpace().Validate([vault]);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => OwnerIsolated.Validate([vault]));
+        Assert.Contains("secrets is not compatible with the isolation by owner", exception.Message);
+        OwnerIsolated.Validate([vault.WithCapability(ModuleCapability.OwnerIsolation)]);
+        ApplicationFrame.WithoutCompartments.Validate([vault]);
+    }
+
+    [Fact]
+    public void A_parameter_supposing_a_shared_space_needs_one_in_the_frame()
+    {
+        var inherits = new ModuleCapability("inherit_shared_space", requiresSharedSpace: true);
+        Assert.True(inherits.RequiresSharedSpace);
+        Assert.False(InheritSharedSpace.RequiresSharedSpace);
+        Assert.Equal(inherits, InheritSharedSpace);
+
+        var messaging = ModuleDeclaration.Compartmented<MessagingModule>().WithCapability(inherits).WithParameter(inherits);
+        ApplicationFrame.SingleCompartment("acme").WithSharedSpace().Validate([messaging]);
+        ApplicationFrame.SingleCompartment("acme").Validate([ModuleDeclaration.Compartmented<MessagingModule>().WithCapability(inherits)]);   // the capability alone is harmless
+
+        var exception = Assert.Throws<InvalidOperationException>(() => ApplicationFrame.SingleCompartment("acme").Validate([messaging]));
+        Assert.Contains("messaging is given a parameter that supposes a shared space, and the application has none: inherit_shared_space", exception.Message);
+        Assert.Contains("WithSharedSpace()", exception.Message);
     }
 
     private static readonly Operation Read = new("documents", "read", OperationKind.Read);
@@ -134,7 +184,7 @@ public class ModuleDeclarationTests
             ModuleDeclaration.Compartmented<MessagingModule>(),
         ]));
 
-        Assert.Contains("messaging cannot hold the isolation by owner", exception.Message);
+        Assert.Contains("messaging is not compatible with the isolation by owner", exception.Message);
         Assert.DoesNotContain("documents", exception.Message);
         Assert.Contains("single compartment 'acme', owner isolation", exception.Message);
     }
@@ -174,8 +224,8 @@ public class ModuleDeclarationTests
             ModuleDeclaration.Compartmented<MessagingModule>().WithParameter(InheritSharedSpace),
         ]));
 
-        Assert.Contains("documents cannot hold", exception.Message);
-        Assert.Contains("messaging cannot hold", exception.Message);
+        Assert.Contains("documents is not compatible", exception.Message);
+        Assert.Contains("messaging is not compatible", exception.Message);
         Assert.Contains("messaging is given a parameter", exception.Message);
     }
 

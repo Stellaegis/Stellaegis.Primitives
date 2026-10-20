@@ -494,13 +494,26 @@ A shared space and an isolation by owner are absent unless declared, with `WithS
 
 Each module declares, from its own registration, whether it has compartments. The statement is always
 explicit, with no default: a module with compartments that said nothing would escape every check the frame
-makes.
+makes. It takes one of three forms: `Compartmented`, for a module that acts in a space the application gives it;
+`WithoutCompartments`, for one that takes none; `OptionallyCompartmented`, for one that serves an application
+without compartments as well as one with — a vault holding the application's own secrets and each compartment's —,
+and is then held to what a module with compartments is.
 
 ```csharp
 services.AddStellaegisModule(ModuleDeclaration.Compartmented<DocumentsModule>()             // the module
+    .AcceptingSharedSpace()
     .WithOperations(DocumentOperations.Read, DocumentOperations.Write, DocumentOperations.Purge));
 services.AddStellaegisModuleCapability<DocumentsModule>(ModuleCapability.OwnerIsolation);   // its PostgreSQL adapter
 ```
+
+A module that serves the shared space says so, `AcceptingSharedSpace()`: it holds data belonging to no compartment,
+or a configuration every compartment falls back to. Refusal is the default, and a route the application marks for the
+shared space fails the startup when neither the module nor the route's own declaration accepts it (see *The shared
+space*).
+
+The frame says what is true of the application; a module is **compatible** with it rather than applying it
+identically. What depends on the frame — where a configuration is resolved, how a path is formed — the module adapts;
+its internal mechanisms do not change.
 
 A module also declares its **operations**: what it does, each with an identity the application grants (see
 *Securing a module's routes and data*). Every route of the module is labelled with one of them, and the startup check
@@ -510,11 +523,15 @@ work done outside requests, a scheduled purge for instance. The declarations of 
 without ASP.NET Core.
 
 A module also declares its **capabilities**: what it can do. Some depend on the database rather than on the
-module. An isolation by owner is a row-level security rule written for one engine, so the adapter for that
-engine declares it, and an adapter for another engine may not. A module may offer capabilities the
-application chooses to turn on, its **parameters**, with
-`AddStellaegisModuleParameter<TModule>(capability)`; the module documents the ones it publishes, and reads
-those turned on from its declaration, `services.GetStellaegisModule<TModule>()?.Parameters`.
+module. `ModuleCapability.OwnerIsolation` says the module is compatible with the isolation by owner the frame
+declares: a module whose database isolates the data an actor owns holds it by a row-level security rule written for
+one engine, so the adapter for that engine declares it, and an adapter for another engine may not; a module none of
+whose data belongs to an actor — a messaging outbox, a vault — holds it by nature, and declares it from its core. A
+module may offer capabilities the application chooses to turn on, its **parameters**, with
+`AddStellaegisModuleParameter<TModule>(capability)`; the module documents the ones it publishes, and reads those
+turned on from its declaration, `services.GetStellaegisModule<TModule>()?.Parameters`. A capability that supposes a
+shared space — inheriting its configuration — says so, `new ModuleCapability("inherit_shared_space",
+requiresSharedSpace: true)`, and the application cannot turn it on without declaring one.
 
 These registrations, and `AddStellaegisFrame(AppFrame.Value)` for the frame, come from
 `Stellaegis.Primitives.DependencyInjection`.
@@ -524,10 +541,11 @@ These registrations, and `AddStellaegisFrame(AppFrame.Value)` for the frame, com
 At startup, the frame is read against the declaration of every module. The application fails to start,
 naming each module at fault and what to change, when:
 
-- a module with compartments is used by an application without any;
-- the frame declares an isolation by owner, and a module with compartments cannot hold it with the adapter
-  registered;
-- a parameter is turned on that the module has no capability for;
+- a module that requires compartments is used by an application without any;
+- the frame declares an isolation by owner, and a module with compartments is not compatible with it, neither by
+  its core nor by the adapter registered;
+- a parameter is turned on that the module has no capability for, or that supposes a shared space in an
+  application without one;
 - a module is declared twice, two module types carry the same name, or a capability or a parameter is
   given to a module nothing declares.
 
@@ -624,25 +642,26 @@ and fails every request on a duplicate. The startup check fails first, naming th
 
 An endpoint receives the port by injection. The mapping method declares its group with `BelongsTo`, then
 `RequireRequestContext`, which fails the startup when no request context is registered, naming the line
-to add, and states whether the module accepts the shared space:
+to add:
 
 ```csharp
 public static RouteGroupBuilder MapDocumentsEndpoints(this IEndpointRouteBuilder routes)
 {
     var group = routes.MapGroup("/documents")
         .BelongsTo<DocumentsModule>()
-        .RequireRequestContext(acceptsSharedSpace: true);
+        .RequireRequestContext();
     group.MapGet("/{id}", (Guid id, IRequestContext context, DocumentService documents) =>
         context.Space is { } space ? documents.Get(space, id, context.Actor) : Results.NotFound());
     return group;
 }
 ```
 
-Not every module has a shared space, and refusal is the default: a module without one writes
-`.RequireRequestContext()`, and an application marking it `InSharedSpace()` fails to start.
-The declaration closest to a route counts, so a sub-group declares again to differ — administration
-routes kept out of the shared space, for instance. A marked route that declares no request context fails
-the startup too; an application serving routes of its own in the shared space declares them the same way.
+Whether the routes may be mapped in the shared space is the module's declaration, `AcceptingSharedSpace()`, and
+refusal is the default: an application marking `InSharedSpace()` a module that does not accept it fails to start.
+A group declares again to differ, with `SharedSpaceAcceptance`: the administration routes of a module that accepts
+the shared space refuse it, `RequireRequestContext(SharedSpaceAcceptance.Refused)`; routes of the application's own,
+which belong to no module, accept it themselves, `RequireRequestContext(SharedSpaceAcceptance.Accepted)`. The
+declaration closest to a route counts. A marked route that declares no request context fails the startup too.
 
 The port serves the endpoints and filters only. The module's core takes the space and the actor as
 parameters — a `Space`, never `null`: a singleton receiving the port would keep the context of the first
@@ -856,7 +875,7 @@ public sealed class NotesController(INotes notes) : ControllerBase
 | Attribute | Equivalent on a group |
 | --- | --- |
 | `[BelongsTo<TModule>]` | `BelongsTo<TModule>()` |
-| `[RequiresRequestContext(AcceptsSharedSpace = true)]` | `RequireRequestContext(acceptsSharedSpace: true)` |
+| `[RequiresRequestContext(SharedSpace = SharedSpaceAcceptance.Accepted)]` | `RequireRequestContext(SharedSpaceAcceptance.Accepted)` |
 | `[Operation(typeof(T), nameof(T.Member))]` | `.WithMetadata(operation)` |
 
 The attributes go on a controller or on an action, and the declaration closest to an action counts: an

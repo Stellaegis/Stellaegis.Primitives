@@ -49,7 +49,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         CheckDeclaredModules(endpoints, modules);
         CheckDeclaredOperations(endpoints, modules);
         CheckFrame(endpoints, frame);
-        CheckSharedSpace(endpoints);
+        CheckSharedSpace(endpoints, modules);
         CheckOperations(services, endpoints);
     };
 
@@ -111,7 +111,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
 
         var contradicted = routed
             .Where(routed => routed.Endpoint.Metadata.GetMetadata<RequiresRequestContextAttribute>() is not null
-                && !declared[routed.Module!.Type].IsCompartmented)
+                && declared[routed.Module!.Type].Compartments == ModuleCompartments.None)
             .Select(routed => routed.Endpoint)
             .ToList();
         if (contradicted.Count > 0)
@@ -236,26 +236,41 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         }
     }
 
-    private static void CheckSharedSpace(IEnumerable<Endpoint> all)
+    // The declaration closest to the route counts; by default it defers to the module's.
+    private static void CheckSharedSpace(IEnumerable<Endpoint> all, IReadOnlyList<ModuleDeclaration> modules)
     {
+        var declared = modules.ToDictionary(module => module.Module, module => module, EqualityComparer<Type>.Default);
         var refused = all
-            .Where(endpoint => endpoint.Metadata.GetMetadata<SharedSpaceMetadata>() is not null
-                && endpoint.Metadata.GetMetadata<RequiresRequestContextAttribute>() is not { AcceptsSharedSpace: true })
+            .Where(endpoint => endpoint.Metadata.GetMetadata<SharedSpaceMetadata>() is not null)
+            .Select(endpoint => (Endpoint: endpoint, Reason: SharedSpaceRefusal(endpoint, declared)))
+            .Where(marked => marked.Reason is not null)
             .ToList();
         if (refused.Count > 0)
         {
+            var described = string.Join(", ", refused.Select(marked => $"{marked.Endpoint.DisplayName} ({marked.Reason})"));
             throw new InvalidOperationException(
-                $"These routes are in the shared space, and nothing declares they accept it: {DescribeSharedSpace(refused)}. "
-                + "Remove InSharedSpace() from them, or, for routes of your own, declare it on their group with "
-                + "RequireRequestContext(acceptsSharedSpace: true).");
+                $"These routes are in the shared space, and nothing declares they accept it: {described}. Remove "
+                + "InSharedSpace() from them; a module accepts the shared space with AcceptingSharedSpace() on its declaration, "
+                + "and a group of routes of your own with RequireRequestContext(SharedSpaceAcceptance.Accepted).");
         }
     }
 
-    private static string DescribeSharedSpace(IEnumerable<Endpoint> endpoints)
-        => string.Join(", ", endpoints.Select(endpoint =>
-            endpoint.Metadata.GetMetadata<RequiresRequestContextAttribute>() is null
-                ? $"{endpoint.DisplayName} (no request context declared)"
-                : $"{endpoint.DisplayName} ({endpoint.GetModule()?.Name ?? "its module"} does not accept the shared space)"));
+    private static string? SharedSpaceRefusal(Endpoint endpoint, IReadOnlyDictionary<Type, ModuleDeclaration> declared)
+    {
+        var declaration = endpoint.Metadata.GetMetadata<RequiresRequestContextAttribute>();
+        if (declaration is null)
+            return "no request context declared";
+        var module = endpoint.GetModule();
+        return declaration.SharedSpace switch
+        {
+            SharedSpaceAcceptance.Accepted => null,
+            SharedSpaceAcceptance.Refused => $"{module?.Name ?? "the route"} refuses the shared space",
+            _ when module is null => "no module declared, and the route does not accept the shared space itself",
+            _ => declared.TryGetValue(module.Type, out var declaredModule) && declaredModule.AcceptsSharedSpace
+                ? null
+                : $"{module.Name} does not accept the shared space",
+        };
+    }
 
     private static void CheckOperations(IServiceProvider services, IEnumerable<Endpoint> all)
     {

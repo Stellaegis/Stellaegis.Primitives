@@ -4,28 +4,45 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Stellaegis.Primitives.AspNetCore;
 
+/// <summary>
+/// Whether a group of routes, or a controller, accepts to be mapped in the shared space — what a route the
+/// application marks with <see cref="SharedSpaceEndpointExtensions.InSharedSpace{TBuilder}"/> is checked against.
+/// </summary>
+public enum SharedSpaceAcceptance
+{
+    /// <summary>As the module declares, <see cref="ModuleDeclaration.AcceptsSharedSpace"/>: the usual case.</summary>
+    OfModule,
+
+    /// <summary>Accepted, whatever the module declares — routes of the application's own in the shared space, for instance.</summary>
+    Accepted,
+
+    /// <summary>Refused, whatever the module declares — the administration routes of a module that accepts it, for instance.</summary>
+    Refused,
+}
+
 /// <summary>What a module declares about the request context when it maps its endpoints.</summary>
 public static class RequestContextEndpointRouteBuilderExtensions
 {
     /// <summary>
-    /// Declares that the endpoints of <paramref name="group"/> read the request context, and whether they accept
-    /// the shared space. Fails the startup when no <see cref="IRequestContext"/> is registered, naming the line to
-    /// add. A module with compartments calls it on the group it maps onto, after declaring the module:
+    /// Declares that the endpoints of <paramref name="group"/> read the request context. Fails the startup when no
+    /// <see cref="IRequestContext"/> is registered, naming the line to add. A module with compartments calls it on
+    /// the group it maps onto, after declaring the module:
     /// <code>
     /// public static RouteGroupBuilder MapDocumentsEndpoints(this IEndpointRouteBuilder routes)
     /// {
     ///     var group = routes.MapGroup("/documents")
     ///         .BelongsTo&lt;DocumentsModule&gt;()
-    ///         .RequireRequestContext(acceptsSharedSpace: true);
+    ///         .RequireRequestContext();
     ///     // ...
     /// }
     /// </code>
     /// </summary>
     /// <param name="group">The group holding the module's endpoints.</param>
-    /// <param name="acceptsSharedSpace">
-    /// Whether the endpoints may be mapped in the shared space. Refused by default: a route the application
-    /// marks with <see cref="SharedSpaceEndpointExtensions.InSharedSpace{TBuilder}"/> fails the startup unless the
-    /// declaration closest to it accepts the shared space. A sub-group declares again to differ from its parent.
+    /// <param name="sharedSpace">
+    /// Whether the endpoints may be mapped in the shared space. By default, as the module declares with
+    /// <see cref="ModuleDeclaration.AcceptingSharedSpace"/>; a sub-group declares again to differ — the
+    /// administration routes of a module that accepts it refuse it —, and routes of the application's own accept it
+    /// themselves. The declaration closest to a route counts.
     /// </param>
     /// <returns><paramref name="group"/>.</returns>
     /// <remarks>
@@ -35,7 +52,7 @@ public static class RequestContextEndpointRouteBuilderExtensions
     /// </remarks>
     /// <exception cref="InvalidOperationException">No request context is registered.</exception>
     /// <seealso cref="RequiresRequestContextAttribute"/>
-    public static RouteGroupBuilder RequireRequestContext(this RouteGroupBuilder group, bool acceptsSharedSpace = false)
+    public static RouteGroupBuilder RequireRequestContext(this RouteGroupBuilder group, SharedSpaceAcceptance sharedSpace = SharedSpaceAcceptance.OfModule)
     {
         Guard.NotNull(group);
 
@@ -50,7 +67,7 @@ public static class RequestContextEndpointRouteBuilderExtensions
                 + "or a compartment source when the frame has many — AddStellaegisRequestContext(c => c.CompartmentFromRoute(\"org\")) — "
                 + "or AddStellaegisRequestContext<TSource>() with a source of its own.");
         }
-        return group.WithMetadata(new RequiresRequestContextAttribute { AcceptsSharedSpace = acceptsSharedSpace });
+        return group.WithMetadata(new RequiresRequestContextAttribute { SharedSpace = sharedSpace });
     }
 }
 
@@ -59,7 +76,7 @@ public static class RequestContextEndpointRouteBuilderExtensions
 /// the shared space — what <see cref="RequestContextEndpointRouteBuilderExtensions.RequireRequestContext"/>
 /// declares on a group of routes:
 /// <code>
-/// [ApiController, Route("notes"), BelongsTo&lt;NotesModule&gt;, RequiresRequestContext(AcceptsSharedSpace = true)]
+/// [ApiController, Route("notes"), BelongsTo&lt;NotesModule&gt;, RequiresRequestContext]
 /// public sealed class NotesController : ControllerBase { /* ... */ }
 /// </code>
 /// The last declaration on a route — the closest to it, an action's over its controller's — is the one that counts.
@@ -72,9 +89,10 @@ public static class RequestContextEndpointRouteBuilderExtensions
 public sealed class RequiresRequestContextAttribute : Attribute
 {
     /// <summary>
-    /// Whether the routes may be mapped in the shared space. Refused by default: a route the application marks with
+    /// Whether the routes may be mapped in the shared space: as the module declares by default, accepted or refused
+    /// whatever it declares. A route the application marks with
     /// <see cref="SharedSpaceEndpointExtensions.InSharedSpace{TBuilder}"/> fails the startup unless the declaration
-    /// closest to it accepts the shared space.
+    /// closest to it, or its module, accepts the shared space.
     /// </summary>
-    public bool AcceptsSharedSpace { get; init; }
+    public SharedSpaceAcceptance SharedSpace { get; init; }
 }

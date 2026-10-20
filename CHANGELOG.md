@@ -19,6 +19,15 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
   operation its module does not declare fails the startup.
 - A handler for the resources is an `AuthorizationHandler<OperationRequirement, TResource>`, and reads the operation
   as `requirement.Operation`; `AuthorizationHandler<Operation, TResource>` no longer compiles.
+- A module that serves the shared space says so on its declaration, `.AcceptingSharedSpace()`, and its routes
+  write `RequireRequestContext()` with nothing more. `RequireRequestContext(acceptsSharedSpace: true)` becomes
+  `RequireRequestContext(SharedSpaceAcceptance.Accepted)`, for routes of the application's own; `acceptsSharedSpace:
+  false` becomes `SharedSpaceAcceptance.Refused`, for a sub-group of a module that accepts it. On a controller,
+  `[RequiresRequestContext(SharedSpace = SharedSpaceAcceptance.Accepted)]`.
+- A capability that supposes a shared space declares it, `new ModuleCapability("inherit_shared_space",
+  requiresSharedSpace: true)`: turned on as a parameter in an application whose frame has no `WithSharedSpace()`,
+  it fails the startup.
+- `ModuleDeclaration.IsCompartmented` stays, and `Compartments` says more: none, optional or required.
 
 ### Added
 
@@ -27,6 +36,13 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
   application can do, with or without ASP.NET Core; an operation with no route is a piece of work done outside
   requests.
 - `Operation.Identity`, the `target.name` an application grants.
+- `ModuleDeclaration.OptionallyCompartmented<TModule>()`: a module that serves an application without compartments
+  as well as one with — a vault holding the application's own secrets and each compartment's. Accepted in every
+  frame; held to what a module with compartments is as soon as the application has compartments.
+- `ModuleDeclaration.AcceptingSharedSpace()` and `AcceptsSharedSpace`: whether the module serves the shared space,
+  by its nature; `SharedSpaceAcceptance` on a group of routes or a controller, to differ from the module.
+- `ModuleCapability.RequiresSharedSpace`: the validation refuses such a parameter in an application without a
+  shared space.
 - `OperationRequirement` (`Stellaegis.Primitives.AspNetCore`): the operation of a route as the requirement checked on
   a resource.
 - The startup check refuses a route labelled with an operation its module does not declare.
@@ -35,6 +51,11 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
 
 - **Breaking.** `Operation` no longer implements `IAuthorizationRequirement`; `AuthorizeResourceAsync` checks an
   `OperationRequirement`, and handler detection looks for handlers of it.
+- **Breaking.** `RequireRequestContext` takes a `SharedSpaceAcceptance` instead of a `bool`, and
+  `RequiresRequestContextAttribute.AcceptsSharedSpace` becomes `SharedSpace`.
+- `ModuleCapability.OwnerIsolation` reads as a compatibility: the frame says what is true of the application, and a
+  module is compatible with it rather than applying it identically. A module none of whose data belongs to an actor
+  declares it from its core; one whose database isolates data an actor owns, from the adapter that holds the rule.
 
 ## [4.3.0] — 2026-10-20
 

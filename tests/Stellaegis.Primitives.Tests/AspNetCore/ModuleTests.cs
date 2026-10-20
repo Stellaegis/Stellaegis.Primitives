@@ -187,6 +187,21 @@ public class ModuleTests
     }
 
     [Fact]
+    public async Task A_module_declared_optionally_compartmented_may_read_the_request_context()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => services
+                .AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme"))
+                .AddStellaegisRequestContext()
+                .AddStellaegisModule(ModuleDeclaration.OptionallyCompartmented<RenderingModule>().WithOperations(Render))
+                .AddAuthorization(),
+            routes => MapRendering(routes).RequireRequestContext().AllowAnonymous().AllowAnyResource());
+
+        var response = await app.GetTestClient().PostAsync("/rendering/html", null, Ct);
+        Assert.Equal("<p></p>", await response.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
     public async Task A_module_name_follows_the_rule()
     {
         await using (await TestApp.StartAsync(

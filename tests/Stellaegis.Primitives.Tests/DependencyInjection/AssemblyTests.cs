@@ -77,7 +77,7 @@ public class AssemblyTests
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             Validate(AddDocuments(new ServiceCollection().AddStellaegisFrame(frame))));
-        Assert.Contains("documents cannot hold the isolation by owner", exception.Message);
+        Assert.Contains("documents is not compatible with the isolation by owner", exception.Message);
     }
 
     [Fact]
