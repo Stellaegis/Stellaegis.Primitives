@@ -7,6 +7,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+A managed exception carries a code, as an `Error` does, and a module's client reads it back from the HTTP answer.
+What leaves an HTTP answer is decided by its status: the message of a 4xx is sent, the message of a 5xx stays in
+the server's log outside Development, the code is always sent.
+
+### Added
+
+- `UserFacingException(Error error, Exception? innerException = null)` and `UserFacingException.Error`. The
+  exception's message is the error's; an error without a code, or of type `None`, is rejected.
+- `HttpResponseMessage.ReadErrorAsync()`, in `Stellaegis.Primitives`: the `Error` of a failed answer, its code from
+  the `code` extension, its message from `detail`, its category from the status — `Failure` for a status without
+  one. An answer that is not problem details reads with no code and its reason phrase.
+
+### Changed
+
+- `AddErrorTranslation()` answers a `UserFacingException` as a failed `Result` is answered: the `code` extension is
+  sent, and **the message of a `UserFacingException` of type `Failure` is no longer sent outside Development**. A
+  host that relied on it shows it from the code instead.
+- `ToProblemDetails()` omits the `code` extension when the error's code is empty.
+
+### Deprecated
+
+- `UserFacingException(string message, ErrorType type, Exception? innerException)`, which carries no code. It will
+  be removed in the next major version, with `Confront` and `ConfrontStellaegisModules()`.
+
 ## [4.1.0] — 2026-10-19
 
 The check of the frame against the modules' declarations takes the name of what it does: a validation. The former

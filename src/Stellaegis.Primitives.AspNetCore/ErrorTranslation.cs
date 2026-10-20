@@ -29,11 +29,12 @@ public static class ErrorTranslation
 
     /// <summary>
     /// The problem details of an error: its status, its message as <c>detail</c>, and its code as the
-    /// <c>code</c> extension. <c>type</c> and <c>title</c> are left to ASP.NET Core's defaults for the status.
+    /// <c>code</c> extension, omitted when the error has none. <c>type</c> and <c>title</c> are left to
+    /// ASP.NET Core's defaults for the status.
     /// </summary>
     /// <remarks>
-    /// The message is copied as it is. <see cref="ToHttpResult(Result)"/> hides the message of a
-    /// <see cref="ErrorType.Failure"/> outside Development; code writing these details itself decides.
+    /// The message is copied as it is. <see cref="ToHttpResult(Result)"/> hides the message of a 5xx outside
+    /// Development; code writing these details itself decides.
     /// </remarks>
     public static ProblemDetails ToProblemDetails(this Error error)
     {
@@ -43,14 +44,15 @@ public static class ErrorTranslation
             Status = error.Type.ToStatusCode(),
             Detail = error.Message,
         };
-        details.Extensions["code"] = error.Code;
+        if (error.Code.Length > 0)
+            details.Extensions["code"] = error.Code;
         return details;
     }
 
     /// <summary>
-    /// The HTTP answer of a result: 204 on success, problem details on failure. The message of a
-    /// <see cref="ErrorType.Failure"/> is hidden outside Development — it usually describes a technical cause —
-    /// and its code is kept.
+    /// The HTTP answer of a result: 204 on success, problem details on failure. The message of a 5xx — a
+    /// <see cref="ErrorType.Failure"/> — is hidden outside Development, since it describes the server, and its
+    /// code is kept.
     /// </summary>
     public static IResult ToHttpResult(this Result result)
         => Guard.NotNull(result).IsSuccess ? TypedResults.NoContent() : new ErrorResult(result.Error!);
@@ -64,7 +66,7 @@ public static class ErrorTranslation
 
     /// <summary>
     /// Translates, on these routes, the exceptions meant for the caller: a <see cref="UserFacingException"/>
-    /// answers the status of its <see cref="ErrorType"/> with its message; an <see cref="ArgumentException"/>
+    /// answers its <see cref="UserFacingException.Error"/> as <see cref="ToHttpResult(Result)"/> does; an <see cref="ArgumentException"/>
     /// answers 400, its message hidden outside Development since a guard names an internal parameter. Any other
     /// exception goes on to the host's exception handler.
     /// </summary>
@@ -81,7 +83,7 @@ public static class ErrorTranslation
             }
             catch (UserFacingException exception)
             {
-                return Problem(exception.Type.ToStatusCode(), exception.Message);
+                return new ErrorResult(exception.Error);
             }
             catch (ArgumentException exception)
             {
@@ -104,7 +106,7 @@ public static class ErrorTranslation
         public Task ExecuteAsync(HttpContext httpContext)
         {
             var details = error.ToProblemDetails();
-            if (error.Type == ErrorType.Failure && !IsDevelopment(httpContext))
+            if (details.Status >= StatusCodes.Status500InternalServerError && !IsDevelopment(httpContext))
                 details.Detail = null;
             return TypedResults.Problem(details).ExecuteAsync(httpContext);
         }

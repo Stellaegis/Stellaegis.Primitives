@@ -88,12 +88,74 @@ public class ErrorTranslationTests
     }
 
     [Fact]
-    public async Task A_user_facing_exception_answers_its_status_and_message()
+    public void Problem_details_omit_an_empty_code()
     {
-        var (status, body) = await AnswerAsync(string () => throw new UserFacingException("This note is locked.", ErrorType.Conflict));
+        var details = new Error(string.Empty, "Note jane-1 does not exist.", ErrorType.NotFound).ToProblemDetails();
+
+        Assert.False(details.Extensions.ContainsKey("code"));
+    }
+
+    [Fact]
+    public async Task A_user_facing_exception_answers_its_status_message_and_code()
+    {
+        var (status, body) = await AnswerAsync(string () =>
+            throw new UserFacingException(Error.Conflict("Note.Locked", "This note is locked.")));
 
         Assert.Equal(HttpStatusCode.Conflict, status);
         Assert.Equal("This note is locked.", body.GetProperty("detail").GetString());
+        Assert.Equal("Note.Locked", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task The_message_of_a_failing_user_facing_exception_is_hidden_outside_development()
+    {
+        var (status, body) = await AnswerAsync(string () =>
+            throw new UserFacingException(Error.Failure("Render.Browser", "Chromium exited at /opt/pw.")));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, status);
+        Assert.False(body.TryGetProperty("detail", out _));
+        Assert.Equal("Render.Browser", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task The_message_of_a_failing_user_facing_exception_shows_in_development()
+    {
+        var (_, body) = await AnswerAsync(string () =>
+            throw new UserFacingException(Error.Failure("Render.Browser", "Chromium exited at /opt/pw.")), "Development");
+
+        Assert.Equal("Chromium exited at /opt/pw.", body.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task A_user_facing_exception_without_code_answers_no_code()
+    {
+#pragma warning disable CS0618 // the former constructor, kept for 4.1 code
+        var (status, body) = await AnswerAsync(string () => throw new UserFacingException("This note is locked.", ErrorType.Conflict));
+#pragma warning restore CS0618
+
+        Assert.Equal(HttpStatusCode.Conflict, status);
+        Assert.Equal("This note is locked.", body.GetProperty("detail").GetString());
+        Assert.False(body.TryGetProperty("code", out _));
+    }
+
+    [Theory]
+    [InlineData(ErrorType.Validation)]
+    [InlineData(ErrorType.Unauthorized)]
+    [InlineData(ErrorType.Forbidden)]
+    [InlineData(ErrorType.NotFound)]
+    [InlineData(ErrorType.Conflict)]
+    [InlineData(ErrorType.PreconditionFailed)]
+    [InlineData(ErrorType.Failure)]
+    public async Task A_client_reads_back_the_error_the_host_wrote(ErrorType type)
+    {
+        var written = new Error("Note.Code", "What the host said.", type);
+        await using var app = await StartAsync(() => Result.Failure(written).ToHttpResult(), "Development");
+
+        using var response = await app.GetTestClient().GetAsync("/", Ct);
+        var read = await response.ReadErrorAsync(Ct);
+
+        Assert.Equal(written, read);
+        Assert.Equal(written.Message, read!.Message);
     }
 
     [Fact]

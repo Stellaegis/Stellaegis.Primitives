@@ -29,7 +29,7 @@ dependency, and code that exposes no endpoint takes no dependency on ASP.NET Cor
 
 | Package | Contents | Depends on |
 | --- | --- | --- |
-| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, `Compartment`, `Space` and `Actor`, the module identity, the event marker and the publication port; the application frame, what a module declares, and the validation of the two | .NET only |
+| `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, reading an error back from an HTTP answer, `Compartment`, `Space` and `Actor`, the module identity, the event marker and the publication port; the application frame, what a module declares, and the validation of the two | .NET only |
 | `Stellaegis.Primitives.DependencyInjection` | The registration of the frame and of what each module and its adapter declare, and their validation at startup — with or without ASP.NET Core | `Stellaegis.Primitives`, the dependency injection abstractions |
 | `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
 | `Stellaegis.Primitives.AspNetCore` | The routes' module, the request context port, giving the space and the actor of a request; the operations that let an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
@@ -98,13 +98,22 @@ The available checks are `NotNull`, `NotEmpty` (for a string or a `Guid`), `NotW
 `ArgumentException` or an `ArgumentNullException`. It signals a programming error, so it is not meant
 to be shown to an end user.
 
-## Errors meant for the end user: `UserFacingException`
+## Errors meant for the caller: `UserFacingException`
 
-When returning a `Result` is not practical, `UserFacingException` carries a message that is safe to
-show to the end user, whatever the environment. It also carries an `ErrorType`, `Validation` by
-default, so that the host can translate it into a status code with the same table it uses for
-`Error`. A library that throws it does not need to know whether the caller is an HTTP endpoint, a
-background worker or a command-line tool.
+When returning a `Result` is not practical, `UserFacingException` carries an `Error`: its code lets the
+caller recognize the exception, its message describes what the caller can correct, and its `ErrorType`
+lets the host translate it into a status code with the same table it uses for a `Result`. A library
+that throws it does not need to know whether the caller is an HTTP endpoint, a background worker or a
+command-line tool.
+
+```csharp
+throw new UserFacingException(Error.Conflict("Note.Locked", "This note is locked."));
+```
+
+The exception is part of the library's contract, so its message must be fit to leave: it holds what the
+caller supplied, or what is public — never a path, a host, a query, or a third-party message copied
+unread. Over HTTP, the message of a 4xx is sent; the message of a 5xx stays in the server's log outside
+Development, and its code is sent.
 
 The cost of this choice is precision: a category cannot express every HTTP status, such as 422 or
 429. A host that needs one of those statuses derives its own exception type and maps it explicitly.
@@ -763,20 +772,38 @@ group.MapGet("/templates/{name}", async (string name, TemplateService templates)
 ```
 
 The problem details carry the error message as `detail` and the error code as a `code` extension; `type`
-and `title` are ASP.NET Core's defaults for the status. The message of a `Failure` is hidden outside the
-Development environment, since it usually describes a technical cause. The code is always kept, so that
+and `title` are ASP.NET Core's defaults for the status. The message of a 5xx — a `Failure` — is hidden outside
+the Development environment, since it describes the server, not the caller's input. The code is always kept, so that
 a client can tell errors apart without parsing a message.
 
 `AddErrorTranslation()` adds a filter to a group of routes, for the exceptions meant for the caller:
 
 | Exception | Answer |
 | --- | --- |
-| `UserFacingException` | the status of its `ErrorType`, with its message |
+| `UserFacingException` | its `Error`, as a failed `Result` answers: the status of its `ErrorType`, its code, its message unless the status is a 5xx outside Development |
 | `ArgumentException`, from a guard for instance | 400, its message hidden outside Development: it names an internal parameter |
 | any other | not handled: it goes on to the application's exception handler, usually a 500 |
 
 `errorType.ToStatusCode()` and `error.ToProblemDetails()` are public too, for code that writes its answer
 itself. `ToProblemDetails` copies the message as it is: hiding it is then the caller's decision.
+
+### Reading an error on the client side
+
+A module's HTTP client reads the error back with `ReadErrorAsync()`, from `Stellaegis.Primitives`, so that it
+takes no dependency on ASP.NET Core. It returns `null` on a success, and otherwise the `Error`: its code from
+the `code` extension, its message from `detail`, its category from the status. The client recognizes its
+managed exceptions by their code, and raises them as they are raised in process.
+
+```csharp
+if (await response.ReadErrorAsync(ct) is { } error)
+    throw error.Code == TemplateErrors.InvalidTemplate
+        ? new TemplateException(error.Message)
+        : new HttpRequestException($"The rendering API answered {error.Code}: {error.Message}", null, response.StatusCode);
+```
+
+A status without a category of its own — 422, 429, a 502 from a proxy — reads as `Failure`. An answer that is
+not problem details, or whose message was hidden, reads with no code and the reason phrase as its message: the
+body is not copied, since nothing says what it holds.
 
 ## License
 
