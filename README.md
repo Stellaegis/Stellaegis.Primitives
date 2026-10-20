@@ -14,7 +14,7 @@ You can use them without any other Stellaegis package. They know nothing of tena
 bus: those are decisions of the application that hosts them. HTTP is confined to a package of its own,
 which only the modules exposing endpoints reference.
 
-The packages that assemble an application are strict on purpose. `Stellaegis.Primitives.DependencyInjection`
+The packages that assemble an application are strict on purpose. `Stellaegis.Primitives.Hosting`
 and `Stellaegis.Primitives.AspNetCore` check at startup what the application and its modules declare, and an
 application whose declarations do not hold fails to start, naming what to change: a module with compartments
 in an application that has none, or a module's route that states no authorization. `Stellaegis.Primitives`
@@ -30,8 +30,8 @@ dependency, and code that exposes no endpoint takes no dependency on ASP.NET Cor
 | Package | Contents | Depends on |
 | --- | --- | --- |
 | `Stellaegis.Primitives` | `Result` and `Error`, `Guard`, `UserFacingException`, reading an error back from an HTTP answer, `Compartment`, `Space` and `Actor`, the module identity and the operations a module performs, the event marker and the publication port; the application frame, what a module declares, and the validation of the two | .NET only |
-| `Stellaegis.Primitives.DependencyInjection` | The registration of the frame and of what each module and its adapter declare, and their validation at startup — with or without ASP.NET Core | `Stellaegis.Primitives`, the dependency injection abstractions |
-| `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations, a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, Dapper |
+| `Stellaegis.Primitives.Hosting` | The registration of the frame and of what each module and its adapter declare, and their validation at startup — with or without ASP.NET Core; the one form of a module's options and of its HTTP client | `Stellaegis.Primitives`, the Microsoft.Extensions abstractions of an assembled application: dependency injection, options, configuration, host, HTTP client factory |
+| `Stellaegis.Primitives.Data` | The unit of work, its relational and in-memory implementations; the declaration of a module's database, its installation and its verification at startup; a snake_case column map and type handlers for Dapper | `Stellaegis.Primitives`, `Stellaegis.Primitives.Hosting`, Dapper |
 | `Stellaegis.Primitives.AspNetCore` | The routes' module, the request context port, giving the space and the actor of a request; the operations on the routes, and their translation into what lets an application secure a module's routes and data; the translation of errors to HTTP answers | `Stellaegis.Primitives`, the ASP.NET Core shared framework |
 
 Depending on `Stellaegis.Primitives.Data` therefore says something about a library: it reads or
@@ -595,7 +595,7 @@ shared space — inheriting its configuration — says so, `new ModuleCapability
 requiresSharedSpace: true)`, and the application cannot turn it on without declaring one.
 
 These registrations, and `AddStellaegisFrame(AppFrame.Value)` for the frame, come from
-`Stellaegis.Primitives.DependencyInjection`.
+`Stellaegis.Primitives.Hosting`.
 
 ### Validating the modules against the frame
 
@@ -625,6 +625,48 @@ services.ValidateStellaegisModules();
 ⚠ The validation reads declarations, not the database. A module whose adapter declares an isolation by
 owner is trusted to have its rule installed; checking the database itself at startup is not part of this
 release.
+
+## Assembling an application
+
+`Stellaegis.Primitives.Hosting` holds what an application assembled by a host shares, with or without ASP.NET Core.
+
+**Options.** A module's adapter registers its options with `AddStellaegisOptions<TOptions>`, bound from a section
+named `Stellaegis:{Module}:{Adapter}` or configured in code. Options that implement `IValidatableOptions` say what
+is wrong with them in `FindError()`, and the host then refuses to start rather than fail at the first use:
+
+```csharp
+public sealed class DocumentsDatabaseOptions : IValidatableOptions
+{
+    public string ConnectionString { get; init; } = string.Empty;
+    public KeySlots Keys { get; init; } = new();
+
+    public string? FindError() => string.IsNullOrWhiteSpace(ConnectionString) ? "ConnectionString is required." : Keys.FindError();
+}
+
+services.AddStellaegisOptions<DocumentsDatabaseOptions>(configuration, "Stellaegis:Documents:PostgreSQL");
+```
+
+**HTTP clients.** A module served by another host is consumed through its port, implemented over HTTP by a client
+whose options derive from `StellaegisClientOptions` — a base address and a timeout, validated at startup:
+
+```csharp
+services.AddStellaegisHttpClient<ITemplateRenderer, HttpTemplateRenderer, RenderingClientOptions>(configuration, "Stellaegis:Rendering:Client");
+```
+
+**Validation at startup.** An ASP.NET Core host validates the frame against the modules by itself. A generic host — a
+worker, a scheduled task — registers `AddStellaegisValidation()`, and fails to start when its declarations do not
+hold. The databases of the modules are verified the same way, under the application's role, with
+`AddStellaegisDatabaseVerification()` from `Stellaegis.Primitives.Data`, each adapter having registered its database
+with `AddStellaegisModuleDatabase(database, openAsApplication)`; an ASP.NET Core host, whose server starts before
+its hosted services, calls `app.Services.VerifyStellaegisDatabasesAsync()` before running instead.
+
+```csharp
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddStellaegisFrame(AppFrame.Value).AddStellaegisValidation().AddStellaegisDatabaseVerification();
+builder.Services.AddStellaegisDocumentsPostgreSQL(builder.Configuration);   // declares the module, its capability, its database
+builder.Services.AddHostedService<TerminatedTenantsPurge>();
+builder.Build().Run();
+```
 
 ## The request context of an HTTP module
 

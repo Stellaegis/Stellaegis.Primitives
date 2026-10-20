@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
-using Stellaegis.Primitives.DependencyInjection;
+using Stellaegis.Primitives.Hosting;
 
-namespace Stellaegis.Primitives.Tests.DependencyInjection;
+namespace Stellaegis.Primitives.Tests.Hosting;
 
 public class AssemblyTests
 {

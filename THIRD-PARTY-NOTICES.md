@@ -8,10 +8,13 @@ alongside them, under their own license.
 | Component | Used by | License (SPDX) | Project |
 | --- | --- | --- | --- |
 | Dapper | `Stellaegis.Primitives.Data` | Apache-2.0 | <https://github.com/DapperLib/Dapper> |
-| Microsoft.Extensions.DependencyInjection.Abstractions | `Stellaegis.Primitives.DependencyInjection` | MIT | <https://github.com/dotnet/runtime> |
+| Microsoft.Extensions.DependencyInjection.Abstractions | `Stellaegis.Primitives.Hosting` | MIT | <https://github.com/dotnet/runtime> |
+| Microsoft.Extensions.Hosting.Abstractions | `Stellaegis.Primitives.Hosting`, `Stellaegis.Primitives.Data` | MIT | <https://github.com/dotnet/runtime> |
+| Microsoft.Extensions.Http | `Stellaegis.Primitives.Hosting` | MIT | <https://github.com/dotnet/runtime> |
+| Microsoft.Extensions.Options.ConfigurationExtensions | `Stellaegis.Primitives.Hosting` | MIT | <https://github.com/dotnet/runtime> |
 
 `Stellaegis.Primitives` references nothing beyond .NET.
 
-Test-only dependencies (xUnit, Microsoft.NET.Test.Sdk, Microsoft.AspNetCore.TestHost, Microsoft.Data.Sqlite,
+Test-only dependencies (xUnit, Microsoft.NET.Test.Sdk, Microsoft.AspNetCore.TestHost, Microsoft.Extensions.Hosting, Microsoft.Data.Sqlite,
 SQLitePCLRaw, Npgsql, Microsoft.Data.SqlClient, System.Security.Cryptography.Pkcs) are not part of any package
 and are not listed here.

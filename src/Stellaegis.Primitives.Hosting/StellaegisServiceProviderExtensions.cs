@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Stellaegis.Primitives.DependencyInjection;
+namespace Stellaegis.Primitives.Hosting;
 
 /// <summary>Reads an application's frame and what its modules declare, and validates the two.</summary>
 public static class StellaegisServiceProviderExtensions

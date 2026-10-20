@@ -16,13 +16,14 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Stellaegis.Primitives\Stellaegis.Primitives.csproj" />
     <ProjectReference Include="..\..\src\Stellaegis.Primitives.Data\Stellaegis.Primitives.Data.csproj" />
-    <ProjectReference Include="..\..\src\Stellaegis.Primitives.DependencyInjection\Stellaegis.Primitives.DependencyInjection.csproj" />
+    <ProjectReference Include="..\..\src\Stellaegis.Primitives.Hosting\Stellaegis.Primitives.Hosting.csproj" />
     <ProjectReference Include="..\..\src\Stellaegis.Primitives.AspNetCore\Stellaegis.Primitives.AspNetCore.csproj" />
   </ItemGroup>
 

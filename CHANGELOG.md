@@ -28,6 +28,12 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
   requiresSharedSpace: true)`: turned on as a parameter in an application whose frame has no `WithSharedSpace()`,
   it fails the startup.
 - `ModuleDeclaration.IsCompartmented` stays, and `Compartments` says more: none, optional or required.
+- `Stellaegis.Primitives.DependencyInjection` is `Stellaegis.Primitives.Hosting`: the package, the namespace. Its
+  admission widens to the Microsoft.Extensions abstractions of an assembled application — options, configuration,
+  host, HTTP client factory —, which is what it is for; the core still takes nothing beyond .NET.
+- `Stellaegis.Primitives.Data` references `Stellaegis.Primitives.Hosting` and the host abstractions, for the
+  verification of the module databases at startup; an application without a database takes neither Dapper nor
+  `.Data`.
 
 ### Added
 
@@ -49,6 +55,17 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
   the session key `stellaegis.actor_via` when there is one, and is read from the `act` claim with
   `ViaFromClaim("act")` on the request context. `Actor.Job(name)` names a piece of work outside requests,
   `job:purge`.
+- `AddStellaegisOptions<TOptions>(configuration, section)` and `(configure)` (`Stellaegis.Primitives.Hosting`): the
+  one form of a module's options, validated when the host starts when they implement `IValidatableOptions`, whose
+  `FindError()` names the first setting that keeps them from working.
+- `StellaegisClientOptions` and `AddStellaegisHttpClient<TPort, TClient, TOptions>` (`Stellaegis.Primitives.Hosting`):
+  the one form of a module's HTTP client, its base address and timeout validated at startup.
+- `AddStellaegisValidation()` (`Stellaegis.Primitives.Hosting`): a host without ASP.NET Core validates the assembly
+  when it starts, and fails naming what to change.
+- `AddStellaegisModuleDatabase(database, openAsApplication)`, `AddStellaegisDatabaseVerification()` and
+  `VerifyStellaegisDatabasesAsync()` (`Stellaegis.Primitives.Data`): an adapter registers its database with the way
+  the application opens it; a generic host verifies every database when it starts; an ASP.NET Core host verifies
+  before running, since its server starts before its hosted services.
 - `KeySlots` (`Stellaegis.Primitives`): a secret that rotates by slots, 1 and 2, one active — the passphrases of a
   pgcrypto column, a password pepper, the key of a vault —, bound from a configuration section with the names the
   modules already use, with `FindError()` for an options validator.
@@ -95,7 +112,7 @@ and the host maps every controller with a single `MapControllers()`. The four pa
   naming no operation fails the startup.
 - `ToActionResult()` for `Result` and `Result<TValue>`, for an action returning `IActionResult`: the failure is
   answered as `ToHttpResult()` answers it.
-- `GetStellaegisModule<TModule>()`, in `Stellaegis.Primitives.DependencyInjection`: a module's declaration, from which
+- `GetStellaegisModule<TModule>()`, in `Stellaegis.Primitives.Hosting`: a module's declaration, from which
   it reads the parameters the application turned on.
 - The startup check refuses a route that reads the request context when none is registered, as
   `RequireRequestContext()` already did when a group was mapped.
@@ -180,7 +197,7 @@ move together to 4.0.0.
   isolation by owner the frame declares, a parameter outside a module's capabilities, a module declared twice or
   two modules of the same name.
 - `NameRules`: the identifier rule and the module name rule, public so that every package reads the same ones.
-- A fourth package, `Stellaegis.Primitives.DependencyInjection`, for an application assembled by dependency
+- A fourth package, `Stellaegis.Primitives.Hosting`, for an application assembled by dependency
   injection, with or without ASP.NET Core: `AddStellaegisFrame`, `AddStellaegisModule`,
   `AddStellaegisModuleCapability<TModule>` for an adapter, `AddStellaegisModuleParameter<TModule>` for the
   application, and `ConfrontStellaegisModules()`, which an application without ASP.NET Core calls once at startup.
@@ -202,7 +219,7 @@ move together to 4.0.0.
   `RequestContextBuilder.SingleCompartment(...)` and `AnonymousActor(...)` are removed: the frame declares them,
   `AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme"))` then `AddStellaegisRequestContext()`, its builder
   now optional. With a single compartment, the frame gives it, and a source of the application's own gives only
-  the actor. `Stellaegis.Primitives.AspNetCore` references `Stellaegis.Primitives.DependencyInjection`.
+  the actor. `Stellaegis.Primitives.AspNetCore` references `Stellaegis.Primitives.Hosting`.
 - **Breaking.** The startup check confronts the frame with the modules, and fails as well when a route belongs to a
   module nothing declares with `AddStellaegisModule` — every module on the routes declares itself, an
   application's own included; when a route reads the request context and its module is declared without

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Stellaegis.Primitives.DependencyInjection;
+namespace Stellaegis.Primitives.Hosting;
 
 /// <summary>
 /// Registers an application's frame and what its modules declare, each by its own author: the application its
