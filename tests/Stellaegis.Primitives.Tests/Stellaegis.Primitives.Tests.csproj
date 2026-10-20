@@ -30,4 +30,8 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Data\Sql\**\*.sql" />
+  </ItemGroup>
+
 </Project>

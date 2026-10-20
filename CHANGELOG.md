@@ -49,6 +49,16 @@ the module, in `Stellaegis.Primitives`, and ASP.NET Core only translates it. The
   the session key `stellaegis.actor_via` when there is one, and is read from the `act` claim with
   `ViaFromClaim("act")` on the request context. `Actor.Job(name)` names a piece of work outside requests,
   `job:purge`.
+- `KeySlots` (`Stellaegis.Primitives`): a secret that rotates by slots, 1 and 2, one active — the passphrases of a
+  pgcrypto column, a password pepper, the key of a vault —, bound from a configuration section with the names the
+  modules already use, with `FindError()` for an options validator.
+- `ModuleDatabase` and `DatabaseLifecycle` (`Stellaegis.Primitives.Data`): what a module's adapter declares about its
+  database — engine, schema, numbered scripts embedded as resources, extensions, tables under forced row-level
+  security and their policies, the scripts that follow the frame —; `InstallAsync`, for an executant holding an
+  administration role, which applies the scripts once, records each with its checksum and the actor in
+  `{schema}._schema_migrations`, applies or removes the scripts of the frame, and grants the application role its
+  data rights with default privileges; `VerifyAsync`, for the application at every startup under its own role, in
+  read only, which fails naming every module and what is missing. PostgreSQL written; SQL Server declared and refused.
 - `ActsOnSpaces()` (`Stellaegis.Primitives.AspNetCore`): a module declares it on its administration routes, which
   take their space as an object — purging a compartment, reading a secret of any compartment by its path. On such a
   route `IRequestContext.Space` fails and `Actor` stays; the startup check refuses it in the shared space, without a

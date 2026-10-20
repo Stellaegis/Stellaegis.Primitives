@@ -383,6 +383,52 @@ var factory = new InMemorySpaceUnitOfWorkFactory<InvoicingDatabase>((space, acto
 isolation rests on the database looks just as isolated in memory whether its policies are right, wrong or
 missing. Test the isolation against a real engine, as this library tests its session context.
 
+## Installing and verifying a module's database
+
+A module that uses a database declares it from the adapter that holds its scripts, as a `ModuleDatabase`: the
+engine, the schema, the numbered scripts embedded as resources, the extensions, the tables under row-level security
+and their policies, and the scripts that follow the frame — the isolation by owner, applied when the frame declares
+it and removed when it does not. The adapter registers the declaration as a singleton, beside its capabilities.
+
+```csharp
+public static readonly ModuleDatabase Value = ModuleDatabase.PostgreSql<DocumentsModule>("doc")
+    .WithScripts(SqlScripts.FromResources(typeof(DocumentsDatabase).Assembly, "Stellaegis.Documents.PostgreSQL.Sql.PostgreSql"))
+    .RequiringExtension("pgcrypto")
+    .WithRowSecurity("doc.documents", "pl_documents_space")
+    .WithRowSecurity("doc.document_versions", "pl_document_versions_document")
+    .WhenFrameDeclares(FrameFeature.OwnerIsolation,
+        "owner_isolation", ownerIsolationSql, "owner_isolation_remove", ownerIsolationRemoveSql,
+        new RowPolicy("doc.documents", "pl_documents_owner"));
+```
+
+Two executants, two roles. **The installation** is run by an installer, a CLI or the provisioner of the application,
+under a role that owns the schemas — `CREATE` on the database, never a superuser: `DatabaseLifecycle.InstallAsync`
+creates the schema and its extensions, applies the scripts in order once, recording each with its checksum and the
+actor in `{schema}._schema_migrations`, applies or removes the scripts of the frame, and grants the application
+role what it needs — usage and data rights on the schema, with default privileges for what a later script creates,
+and never a DDL right. It is replayable: a migration is the installation run again. **The verification** is run by
+the application, at every startup, under its own role and in read only: `DatabaseLifecycle.VerifyAsync` reads the
+scripts applied and the catalogue of the engine, and fails naming every module and what is missing — a script not
+applied, or applied with another content, an extension or a policy the frame requires, a policy the frame does not
+declare, a table not under forced row-level security. It proves that the installation ran, and that nothing changed
+since.
+
+```csharp
+await DatabaseLifecycle.InstallAsync(databases, AppFrame.Value, (_, ct) => adminSource.OpenConnectionAsync(ct).AsTask(), "myapp", ct: ct);
+await DatabaseLifecycle.VerifyAsync(databases, AppFrame.Value, (_, ct) => appSource.OpenConnectionAsync(ct).AsTask(), ct);
+```
+
+While no real data exists, a script is corrected in place rather than followed by another: a script applied with
+another content fails both the verification and the installation, which says to reinstall. PostgreSQL is written;
+SQL Server is declared, and refused by both until an adapter needs it.
+
+### Secrets that rotate
+
+A passphrase of a pgcrypto column, a password pepper, the key of a vault rotate the same way: two slots, one active,
+new writes recording their slot. `KeySlots`, from `Stellaegis.Primitives`, is that shape, bound from a configuration
+section — `ActiveKeySlot`, `Keys:1`, `Keys:2` — and validated at startup with `FindError()`: an active slot without a
+key fails the host, not the first write.
+
 ## Mapping snake_case columns with Dapper
 
 Database columns are often named in snake_case (`display_name`) while C# properties use PascalCase
