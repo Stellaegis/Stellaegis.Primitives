@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [5.0.1] — 2026-10-21
+
+### Fixed
+
+- `StellaegisClientOptions.BaseUrl` and `Timeout` are settable: the overload of `AddStellaegisHttpClient` that
+  configures the options in code could not set them, their accessors being `init`. The options of a module follow:
+  properties with `set`, so that they are bound from a section or configured in code alike.
+
 ## [5.0.0] — 2026-10-20
 
 The one break of the 5.0 line, taken in one go while no version has a download. The frame of the application says

@@ -94,6 +94,22 @@ public class HostingTests
         Assert.Equal(TimeSpan.FromSeconds(5), client.Http.Timeout);
     }
 
+    [Fact]
+    public void An_http_client_configured_in_code_takes_its_address_and_its_timeout_too()
+    {
+        using var provider = new ServiceCollection()
+            .AddStellaegisHttpClient<INotesClient, HttpNotesClient, NotesClientOptions>(o =>
+            {
+                o.BaseUrl = "https://notes.internal/api";
+                o.Timeout = TimeSpan.FromSeconds(5);
+            }).Services
+            .BuildServiceProvider();
+
+        var client = Assert.IsType<HttpNotesClient>(provider.GetRequiredService<INotesClient>());
+        Assert.Equal(new Uri("https://notes.internal/api/"), client.Http.BaseAddress);
+        Assert.Equal(TimeSpan.FromSeconds(5), client.Http.Timeout);
+    }
+
     [Theory]
     [InlineData("", "BaseUrl is required")]
     [InlineData("notes.internal/api", "BaseUrl is required")]

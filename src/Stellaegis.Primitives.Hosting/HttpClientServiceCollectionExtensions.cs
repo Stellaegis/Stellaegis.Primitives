@@ -7,7 +7,7 @@ namespace Stellaegis.Primitives.Hosting;
 /// <summary>
 /// The options of a module's HTTP client, reaching the host that serves the module: its base address and its
 /// timeout. A module derives from it to add what its client needs, and binds it from
-/// <c>Stellaegis:{Module}:Client</c>.
+/// <c>Stellaegis:{Module}:Client</c>, or configures it in code — which is why its properties are settable.
 /// <code>
 /// Stellaegis:Rendering:Client:BaseUrl = https://rendering.internal/api
 /// Stellaegis:Rendering:Client:Timeout = 00:01:00
@@ -16,10 +16,10 @@ namespace Stellaegis.Primitives.Hosting;
 public class StellaegisClientOptions : IValidatableOptions
 {
     /// <summary>The base address of the host serving the module, an absolute http or https URL.</summary>
-    public string BaseUrl { get; init; } = string.Empty;
+    public string BaseUrl { get; set; } = string.Empty;
 
     /// <summary>The timeout of each call. One minute unless set.</summary>
-    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(60);
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(60);
 
     /// <inheritdoc/>
     public virtual string? FindError()

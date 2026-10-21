@@ -7,11 +7,12 @@ namespace Stellaegis.Primitives.Hosting;
 
 /// <summary>
 /// Options that say what is wrong with them, so that the host refuses to start rather than fail at the first use.
+/// Their properties are settable, so that they can be configured in code as well as bound from a section.
 /// <code>
 /// public sealed class DocumentsDatabaseOptions : IValidatableOptions
 /// {
-///     public string ConnectionString { get; init; } = string.Empty;
-///     public KeySlots Keys { get; init; } = new();
+///     public string ConnectionString { get; set; } = string.Empty;
+///     public KeySlots Keys { get; set; } = new();
 ///
 ///     public string? FindError()
 ///         => string.IsNullOrWhiteSpace(ConnectionString) ? "ConnectionString is required." : Keys.FindError();

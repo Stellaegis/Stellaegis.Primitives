@@ -632,13 +632,14 @@ of the module databases (see *Installing and verifying a module's database* and 
 
 **Options.** A module's adapter registers its options with `AddStellaegisOptions<TOptions>`, bound from a section
 named `Stellaegis:{Module}:{Adapter}` or configured in code. Options that implement `IValidatableOptions` say what
-is wrong with them in `FindError()`, and the host then refuses to start rather than fail at the first use:
+is wrong with them in `FindError()`, and the host then refuses to start rather than fail at the first use. Their
+properties are settable (`set`, not `init`): the same options are configured in code by the second overload.
 
 ```csharp
 public sealed class DocumentsDatabaseOptions : IValidatableOptions
 {
-    public string ConnectionString { get; init; } = string.Empty;
-    public KeySlots Keys { get; init; } = new();
+    public string ConnectionString { get; set; } = string.Empty;
+    public KeySlots Keys { get; set; } = new();
 
     public string? FindError() => string.IsNullOrWhiteSpace(ConnectionString) ? "ConnectionString is required." : Keys.FindError();
 }
@@ -651,6 +652,7 @@ whose options derive from `StellaegisClientOptions` — a base address and a tim
 
 ```csharp
 services.AddStellaegisHttpClient<ITemplateRenderer, HttpTemplateRenderer, RenderingClientOptions>(configuration, "Stellaegis:Rendering:Client");
+services.AddStellaegisHttpClient<ITemplateRenderer, HttpTemplateRenderer, RenderingClientOptions>(o => o.BaseUrl = "https://rendering.internal/api");
 ```
 
 **Validation at startup.** An ASP.NET Core host validates the frame against the modules by itself. A generic host — a
