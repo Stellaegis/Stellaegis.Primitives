@@ -898,6 +898,34 @@ await foreach (var compartment in directory.ListAsync(ct))
     await documents.PurgeCompartmentAsync(compartment, Actor.Job("purge"), ct);
 ```
 
+### Admitting an actor
+
+The authentication says who the actor is; it does not say whether the actor is still admitted — an account blocked
+since the token was issued, a token revoked. Each module that knows registers an `IActorAdmission`, and the host asks
+them all, at the door:
+
+```csharp
+public sealed class BlockedAccounts : IActorAdmission
+{
+    public ValueTask<Result> AdmitAsync(ClaimsPrincipal principal, CancellationToken ct)
+        => ValueTask.FromResult(IsBlocked(principal) ? Result.Failure(Error.Unauthorized("Account.Blocked", "This account is blocked.")) : Result.Success());
+}
+
+services.AddStellaegisActorAdmission<BlockedAccounts>();          // what a module does, from its registration
+app.UseAuthentication();
+app.UseStellaegisActorAdmission();                               // what the host does, before UseAuthorization()
+app.UseAuthorization();
+```
+
+Every admission registered is consulted and the first refusal wins — admission only ever restricts. A refused
+request answers 401 with the problem details of the error, its code telling which admission refused; an anonymous
+request goes on, there is nobody to refuse. `IActorAdmissions` asks the same question apart from the pipeline, for a
+token issuer deciding an authorization or a refresh: `AddStellaegisActorAdmissions()` registers it alone.
+
+⚠ A host that enables the middleware without any admission registered admits nothing more than the authentication
+did. The admissions come from the modules — the accounts module for the blocked accounts, the token issuer for the
+revoked tokens —, not from this package.
+
 ### Checked at startup
 
 `AddStellaegisStartupCheck()`, which registering a request context calls too, registers a startup check

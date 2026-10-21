@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [5.1.0] — 2026-10-21
+
+### Added
+
+- `IActorAdmission`, in `Stellaegis.Primitives.AspNetCore`: whether the actor behind an authenticated principal
+  is still admitted — an account blocked, a token revoked —, one implementation per module that knows, every one
+  registered consulted, the first refusal winning. `AddStellaegisActorAdmission<T>()` registers one;
+  `UseStellaegisActorAdmission()`, after the authentication, refuses with 401 and the code of the error;
+  `IActorAdmissions` asks the question apart from the pipeline, for a token issuer.
+
 ## [5.0.1] — 2026-10-21
 
 ### Fixed
