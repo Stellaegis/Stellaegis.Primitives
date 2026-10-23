@@ -213,14 +213,4 @@ public class ModuleDatabaseTests
         Assert.Throws<ArgumentException>(() => new RowPolicy("lcw.widgets", "pl-widgets"));
         Assert.Equal("widgets (PostgreSql, schema lcw)", ModuleDatabase.PostgreSql<WidgetsModule>("lcw").ToString());
     }
-
-    [Fact]
-    public async Task SqlServer_is_declared_and_not_yet_written()
-    {
-        var database = ModuleDatabase.SqlServer<WidgetsModule>("lcw");
-
-        var exception = await Assert.ThrowsAsync<NotSupportedException>(() =>
-            DatabaseLifecycle.VerifyAsync([database], ApplicationFrame.SingleCompartment("acme"), (_, _) => Task.FromResult<DbConnection>(null!), TestContext.Current.CancellationToken));
-        Assert.Contains("SqlServer", exception.Message);
-    }
 }

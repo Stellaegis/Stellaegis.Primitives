@@ -27,7 +27,10 @@ public sealed record InstallationReport(IReadOnlyList<string> Applied, IReadOnly
 /// and that nothing changed since.
 /// </para>
 /// <para>
-/// PostgreSQL is written. SQL Server is declared and refused by both, until an adapter needs it.
+/// PostgreSQL and SQL Server are written. On SQL Server, a script is split into batches on its <c>go</c> lines, run
+/// with its record in one transaction; the application role is a database role, created when missing, which the
+/// host makes its user a member of; it is granted its rights on the schema, <c>VIEW DEFINITION</c> included.
+/// Extensions, row-level security and the scripts following the frame are not declared on SQL Server yet.
 /// </para>
 /// </remarks>
 public static class DatabaseLifecycle
@@ -42,7 +45,10 @@ public static class DatabaseLifecycle
     /// <param name="databases">The databases declared by the modules of the application.</param>
     /// <param name="frame">The frame of the application, which the scripts following it match.</param>
     /// <param name="openAsAdministrator">Opens the connection of a module's database, under the administration role. Disposed after use.</param>
-    /// <param name="applicationRole">The role the application connects under, granted usage and data rights, never DDL.</param>
+    /// <param name="applicationRole">
+    /// The role the application connects under, granted usage and data rights, never DDL. On SQL Server, a database
+    /// role, created when missing, which the host makes its user a member of.
+    /// </param>
     /// <param name="actor">The actor recorded with each script applied; <see cref="DefaultActor"/> unless given.</param>
     /// <param name="cancellationToken">Cancels the installation between two scripts.</param>
     /// <exception cref="InvalidOperationException">A script was applied with another content, or the database is ahead of the package.</exception>
@@ -115,9 +121,8 @@ public static class DatabaseLifecycle
     private static IEngineLifecycle Engine(ModuleDatabase database) => database.Engine switch
     {
         DatabaseEngine.PostgreSql => PostgreSqlLifecycle.Instance,
-        _ => throw new NotSupportedException(
-            $"The database of {database.Name} runs on {database.Engine}, which this package neither installs nor verifies yet: "
-            + "only PostgreSQL is written."),
+        DatabaseEngine.SqlServer => SqlServerLifecycle.Instance,
+        _ => throw new NotSupportedException($"The database of {database.Name} runs on {database.Engine}, which this package does not know."),
     };
 }
 

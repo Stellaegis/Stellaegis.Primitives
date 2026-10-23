@@ -12,7 +12,10 @@ public enum DatabaseEngine
     /// <summary>PostgreSQL.</summary>
     PostgreSql,
 
-    /// <summary>SQL Server, LocalDB included. Declared, not yet installed nor verified by this package.</summary>
+    /// <summary>
+    /// SQL Server, LocalDB included: installed and verified, without extensions, row-level security nor scripts
+    /// following the frame, which wait for the first module that needs them.
+    /// </summary>
     SqlServer,
 }
 
@@ -174,7 +177,10 @@ public sealed class ModuleDatabase
     public static ModuleDatabase PostgreSql<TModule>(string schema) where TModule : IStellaegisModule
         => Create<TModule>(DatabaseEngine.PostgreSql, schema);
 
-    /// <summary>The database of <typeparamref name="TModule"/> on SQL Server, in <paramref name="schema"/>. Declared, not yet installed nor verified by this package.</summary>
+    /// <summary>
+    /// The database of <typeparamref name="TModule"/> on SQL Server, in <paramref name="schema"/>: numbered scripts,
+    /// without extensions, row-level security nor scripts following the frame.
+    /// </summary>
     /// <exception cref="ArgumentException">The module name or the schema is not a valid identifier.</exception>
     public static ModuleDatabase SqlServer<TModule>(string schema) where TModule : IStellaegisModule
         => Create<TModule>(DatabaseEngine.SqlServer, schema);
@@ -227,8 +233,11 @@ public sealed class ModuleDatabase
 
     /// <summary>Declares that the schema requires the extension <paramref name="extension"/>, such as <c>pgcrypto</c>.</summary>
     /// <exception cref="ArgumentException">The name is not a valid identifier.</exception>
+    /// <exception cref="NotSupportedException">The database runs on SQL Server, which has no extensions.</exception>
     public ModuleDatabase RequiringExtension(string extension)
-        => new(Module, Name, Engine, Schema, Scripts.ToImmutableList(), Extensions.ToImmutableList().Add(CheckIdentifier(extension, "extension")),
+        => Engine == DatabaseEngine.SqlServer
+            ? throw new NotSupportedException($"{Name}: SQL Server has no extensions; what an extension brings on PostgreSQL is written otherwise there.")
+            : new(Module, Name, Engine, Schema, Scripts.ToImmutableList(), Extensions.ToImmutableList().Add(CheckIdentifier(extension, "extension")),
             SecuredTables.ToImmutableList(), Policies.ToImmutableList(), FrameScripts.ToImmutableList());
 
     /// <summary>
@@ -236,8 +245,10 @@ public sealed class ModuleDatabase
     /// policies named — those the frame does not decide.
     /// </summary>
     /// <exception cref="ArgumentException">The table is not <c>schema.table</c>, or a policy is not a valid identifier.</exception>
+    /// <exception cref="NotSupportedException">The database runs on SQL Server, where row-level security waits for its case.</exception>
     public ModuleDatabase WithRowSecurity(string table, params IEnumerable<string> policies)
     {
+        RefuseRowSecurityOnSqlServer();
         var checkedTable = CheckTable(table);
         var declared = Guard.NotNull(policies).Select(policy => new RowPolicy(checkedTable, policy)).ToList();
         return new(Module, Name, Engine, Schema, Scripts.ToImmutableList(), Extensions.ToImmutableList(),
@@ -250,9 +261,11 @@ public sealed class ModuleDatabase
     /// <paramref name="policies"/> that must exist exactly when the feature is declared.
     /// </summary>
     /// <exception cref="ArgumentException">A name or a text is blank, or the feature is declared twice.</exception>
+    /// <exception cref="NotSupportedException">The database runs on SQL Server, where row-level security waits for its case.</exception>
     public ModuleDatabase WhenFrameDeclares(
         FrameFeature feature, string applyName, string applySql, string removeName, string removeSql, params IEnumerable<RowPolicy> policies)
     {
+        RefuseRowSecurityOnSqlServer();
         if (FrameScripts.Any(script => script.Feature == feature))
             throw new ArgumentException($"{Name} already declares a script for {feature}.", nameof(feature));
         var script = new FrameScript(
@@ -276,6 +289,19 @@ public sealed class ModuleDatabase
         if (parts.Length != 2 || !NameRules.IsIdentifier(parts[0]) || !NameRules.IsIdentifier(parts[1]))
             throw new ArgumentException($"'{table}' is not a schema-qualified table name, schema.table, each an identifier: {NameRules.IdentifierRule}.", nameof(table));
         return table;
+    }
+
+    // SQL Server holds one enabled security policy per table, with one filter predicate per operation: rules that add
+    // up, as the policies of PostgreSQL do, become one predicate function that the frame replaces. The declaration
+    // for it waits for the first module that runs its row-level security on SQL Server.
+    private void RefuseRowSecurityOnSqlServer()
+    {
+        if (Engine == DatabaseEngine.SqlServer)
+        {
+            throw new NotSupportedException(
+                $"{Name}: row-level security and the scripts following the frame are not declared on SQL Server yet: "
+                + "one enabled security policy and one filter predicate per table, which this declaration does not express.");
+        }
     }
 
     private static ModuleDatabase Create<TModule>(DatabaseEngine engine, string schema) where TModule : IStellaegisModule
