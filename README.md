@@ -819,6 +819,7 @@ An operation carries two things, and grants neither:
 | --- | --- | --- |
 | Its identity, `target.name` | which operation — the key an application grants | `invoices.validate` |
 | Its kind | what it does to the data, declared rather than deduced from the HTTP verb | `Write` |
+| Whether it requires a second factor | the operation is sensitive in itself, whoever is granted it: exercised only by a session whose person used a second factor | `new("payroll", "pay", OperationKind.Write, requiresSecondFactor: true)` |
 
 The target is a type of data, never an instance: one module may act on several targets, `invoices` and
 `fiscal_years`. Target and name follow the grammar of table names, which permission codes follow too: 1 to 63
@@ -826,6 +827,9 @@ lowercase letters, digits and single underscores, starting with a letter and end
 hyphen is refused, never converted. The kind — `Read`, `Write` or `Delete` —
 is a fact about the data, read for audit or to refuse writes during a maintenance as much as for security.
 Administration is not a kind: it is an audience, and a module maps its administration routes separately.
+The requirement of a second factor belongs to the elementary operation — a purge, a deletion, a payment, rarely a
+read —, never to a role that groups it: a role is powerful only by some of its operations. None requires it by
+default; a rights system reads the `amr` of the session to enforce it, and may harden an operation, never weaken it.
 
 | What | Who decides | How |
 | --- | --- | --- |

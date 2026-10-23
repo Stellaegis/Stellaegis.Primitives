@@ -100,6 +100,19 @@ public class OperationTests
     }
 
     [Fact]
+    public void An_operation_sensitive_in_itself_requires_a_second_factor_and_none_does_by_default()
+    {
+        var pay = new Operation("payroll", "pay", OperationKind.Write, requiresSecondFactor: true);
+
+        Assert.True(pay.RequiresSecondFactor);
+        Assert.False(NotesEndpoints.Purge.RequiresSecondFactor);
+        Assert.Equal("payroll.pay", pay.Identity);
+        Assert.NotEqual(new Operation("payroll", "pay", OperationKind.Write), pay);   // a fact of the declaration
+        Assert.Equal(new Operation("payroll", "pay", OperationKind.Write, true), pay);
+        Assert.Equal(new Operation("payroll", "pay", OperationKind.Write, true).GetHashCode(), pay.GetHashCode());
+    }
+
+    [Fact]
     public void An_operation_needs_a_target_a_name_and_a_known_kind()
     {
         Assert.Throws<ArgumentException>(() => new Operation(" ", "read", OperationKind.Read));
