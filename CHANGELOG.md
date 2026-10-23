@@ -7,6 +7,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [5.2.0] — 2026-10-23
+
+### Added
+
+- The life cycle of a module's database on SQL Server, in `Stellaegis.Primitives.Data`: `DatabaseLifecycle.InstallAsync`
+  and `VerifyAsync` install and verify a database declared by `ModuleDatabase.SqlServer<TModule>`. A script is split
+  into batches on its `go` lines and runs with its record in one transaction. The application role is a database
+  role, created when missing, granted its rights on the schema and `VIEW DEFINITION`, and denied any write to
+  `_schema_migrations`.
+
+### Changed
+
+- On a SQL Server declaration, `RequiringExtension`, `WithRowSecurity` and `WhenFrameDeclares` throw
+  `NotSupportedException`: SQL Server has no extensions, and holds one enabled security policy and one filter
+  predicate per table, which these declarations do not express. Until 5.1.0 such a declaration was accepted, and
+  both executants refused every SQL Server database.
+
 ## [5.1.0] — 2026-10-21
 
 ### Added

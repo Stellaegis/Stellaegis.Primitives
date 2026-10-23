@@ -20,7 +20,8 @@ jobs:
     runs-on: ubuntu-latest
 
     # Real engines for the tests of the session context, which a pooled connection must not hand to its next
-    # user. Throwaway containers: the SQL Server password guards nothing that outlives the job.
+    # user, and of the life cycle of a module's database. Throwaway containers: the SQL Server password guards
+    # nothing that outlives the job.
     services:
       postgres:
         image: postgres:17
@@ -32,7 +33,7 @@ jobs:
           --health-cmd "pg_isready -U postgres"
           --health-interval 5s --health-timeout 5s --health-retries 20
       sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
+        image: mcr.microsoft.com/mssql/server:2025-latest
         env:
           ACCEPT_EULA: Y
           MSSQL_SA_PASSWORD: Stellaegis-Tests-1
@@ -60,8 +61,8 @@ jobs:
           fi
 
       # Quality gate: the whole solution must build and its tests pass before anything is pushed. The data
-      # tests run on an in-process SQLite database; those of the session context on the two services above,
-      # and they would be skipped without these variables.
+      # tests run on an in-process SQLite database; those of the session context and of the life cycle on the
+      # two services above, and they would be skipped without these variables.
       - name: Test
         env:
           STELLAEGIS_TEST_POSTGRESQL: Host=localhost;Username=postgres;Database=postgres

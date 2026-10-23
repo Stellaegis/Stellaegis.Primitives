@@ -419,8 +419,28 @@ await DatabaseLifecycle.VerifyAsync(databases, AppFrame.Value, (_, ct) => appSou
 ```
 
 While no real data exists, a script is corrected in place rather than followed by another: a script applied with
-another content fails both the verification and the installation, which says to reinstall. PostgreSQL is written;
-SQL Server is declared, and refused by both until an adapter needs it.
+another content fails both the verification and the installation, which says to reinstall.
+
+### On SQL Server
+
+`ModuleDatabase.SqlServer<TModule>("schema")` declares the database of a module on SQL Server, LocalDB included, and
+the same two executants install and verify it:
+
+- **a script is split into batches on its `go` lines**, a separator of the client tools that the engine does not
+  know, and its batches run with its record in one transaction: the DDL of SQL Server is transactional, so a script
+  that fails leaves nothing behind;
+- **the application role is a database role**, which the installation creates when missing and the host makes its
+  user a member of — a Windows account under integrated security, a SQL login elsewhere. The role is granted its
+  rights on the schema, which reach what a later script creates, and `VIEW DEFINITION`, which the verification needs
+  to read the catalogue; any write to `_schema_migrations` is denied to it;
+- **the database is the host's**: its installation creates it, with an explicit collation, since a database created
+  without one takes the collation of the instance, which follows the locale of the machine. The life cycle installs
+  schemas in a database that exists.
+
+Extensions, row-level security and the scripts that follow the frame are refused at the declaration on SQL Server.
+The engine has no extensions, and holds one enabled security policy and one filter predicate per table: rules that add
+up, as the policies of PostgreSQL do, become there one predicate function that the frame replaces, a declaration that
+waits for the first module running its row-level security on SQL Server.
 
 ### Secrets that rotate
 
