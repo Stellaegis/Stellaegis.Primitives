@@ -217,6 +217,21 @@ public class ModuleDeclarationTests
     }
 
     [Fact]
+    public void An_operation_identity_belongs_to_one_module()
+    {
+        // Identity and Registry once both declared users.read: a right granted on one would have opened the other.
+        var users = new Operation("users", "read", OperationKind.Read);
+        var documents = ModuleDeclaration.Compartmented<DocumentsModule>().WithOperations(Read, users);
+        var messaging = ModuleDeclaration.Compartmented<MessagingModule>().WithOperations(users);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => ApplicationFrame.ManyCompartments().Validate([documents, messaging]));
+
+        Assert.Contains("users.read is declared by documents and messaging", exception.Message);
+        Assert.DoesNotContain("documents.read", exception.Message);
+        ApplicationFrame.ManyCompartments().Validate([documents, ModuleDeclaration.Compartmented<MessagingModule>()]);
+    }
+
+    [Fact]
     public void Every_fault_is_named_at_once()
     {
         var exception = Assert.Throws<InvalidOperationException>(() => OwnerIsolated.Validate([

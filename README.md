@@ -628,7 +628,9 @@ naming each module at fault and what to change, when:
 - a parameter is turned on that the module has no capability for, or that supposes a shared space in an
   application without one;
 - a module is declared twice, two module types carry the same name, or a capability or a parameter is
-  given to a module nothing declares.
+  given to a module nothing declares;
+- two modules declare the same operation identity: the identity is the key an application grants, and a right
+  granted on it would open the operation of both.
 
 An ASP.NET Core host runs this validation by itself, with the startup check of its routes. An
 application without ASP.NET Core — a desktop application, a worker — calls it once, after building its

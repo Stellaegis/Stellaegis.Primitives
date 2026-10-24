@@ -142,7 +142,8 @@ public sealed class ApplicationFrame
     /// </code>
     /// </summary>
     /// <remarks>
-    /// Refused: a module declared twice, or two module types carrying the same name; a module that requires
+    /// Refused: a module declared twice, or two module types carrying the same name; an operation identity declared
+    /// by two modules, since a right granted on it would open both; a module that requires
     /// compartments in an application without any; a module with compartments that is not compatible with the
     /// isolation by owner the frame declares; a parameter outside the module's capabilities; a parameter that
     /// supposes a shared space in an application without one. The guarantee stays the refusal at run time; the
@@ -165,6 +166,13 @@ public sealed class ApplicationFrame
             .Where(group => group.Count() > 1)
             .Select(group => $"'{group.Key}' is the name of {string.Join(" and ", group.Select(module => module.Module.FullName))}: "
                 + "a module name identifies one module"));
+        faults.AddRange(declared
+            .DistinctBy(module => module.Module)
+            .SelectMany(module => module.Operations.Select(operation => (Module: module.Name, operation.Identity)))
+            .GroupBy(declaration => declaration.Identity, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => $"{group.Key} is declared by {string.Join(" and ", group.Select(declaration => declaration.Module))}: "
+                + "an identity is what an application grants, so it names the operation of one module — rename the target of one of them"));
 
         foreach (var module in declared.DistinctBy(module => module.Module))
         {

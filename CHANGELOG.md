@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `ApplicationFrame.Validate` refuses an operation identity declared by two modules, naming both: the identity is the
+  key an application grants, and a right granted on it opened the operation of each. An assembly in that case
+  started until now; rename the target of one of the two operations.
+
 ## [5.3.0] — 2026-10-23
 
 ### Added
