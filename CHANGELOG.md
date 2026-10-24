@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [5.4.0] — 2026-10-24
+
 ### Added
 
 - `Preference`, a preference a person sets for their own comfort and that only the clients read: `Choice`, `Color`,
@@ -473,7 +475,13 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
-[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.3.0...HEAD
+[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.4.0...HEAD
+[5.4.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.3.0...v5.4.0
+[5.3.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.2.0...v5.3.0
+[5.2.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.1.0...v5.2.0
+[5.1.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.0.1...v5.1.0
+[5.0.1]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.0.0...v5.0.1
+[5.0.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.3.0...v5.0.0
 [4.3.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v4.0.0...v4.1.0
