@@ -217,6 +217,34 @@ public class ModuleDeclarationTests
     }
 
     [Fact]
+    public void A_declaration_carries_the_preferences_of_the_module_under_its_name()
+    {
+        var view = Preference.Choice("view", ["list", "grid"], "list");
+        var compact = Preference.Boolean("compact", false);
+
+        var documents = ModuleDeclaration.Compartmented<DocumentsModule>().WithPreferences(view, compact).WithPreferences(view);
+        var messaging = ModuleDeclaration.Compartmented<MessagingModule>().WithPreferences(compact);
+
+        Assert.Equal(["documents.compact", "documents.view"], documents.Preferences.Keys.Order(StringComparer.Ordinal));
+        Assert.Same(view, documents.Preferences["documents.view"]);
+        Assert.Equal(["messaging.compact"], messaging.Preferences.Keys);
+        Assert.Empty(ModuleDeclaration.Compartmented<SecretsModule>().Preferences);
+        Assert.Equal(documents.Preferences, documents.WithCapability(InheritSharedSpace).WithOperations(Read).AcceptingSharedSpace().Preferences);
+        ApplicationFrame.ManyCompartments().Validate([documents, messaging]);
+    }
+
+    [Fact]
+    public void A_preference_name_names_one_definition_in_its_module()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => ModuleDeclaration.Compartmented<DocumentsModule>()
+            .WithPreferences(Preference.Choice("view", ["list", "grid"]), Preference.Choice("view", ["list", "grid", "table"])));
+
+        Assert.Contains("documents declares the preference view twice, with two definitions", exception.Message);
+        Assert.Throws<ArgumentNullException>(() => ModuleDeclaration.Compartmented<DocumentsModule>().WithPreferences(null!));
+        Assert.Throws<ArgumentNullException>(() => ModuleDeclaration.Compartmented<DocumentsModule>().WithPreferences([null!]));
+    }
+
+    [Fact]
     public void An_operation_identity_belongs_to_one_module()
     {
         // Identity and Registry once both declared users.read: a right granted on one would have opened the other.

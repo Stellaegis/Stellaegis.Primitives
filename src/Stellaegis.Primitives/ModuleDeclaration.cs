@@ -20,8 +20,8 @@ public enum ModuleCompartments
 
 /// <summary>
 /// What a module declares to the application that assembles it: whether it has compartments, whether it accepts
-/// the shared space, the operations it performs, the capabilities it has, and the parameters the assembly chooses
-/// among them. Read against the <see cref="ApplicationFrame"/> by <see cref="ApplicationFrame.Validate"/>, which
+/// the shared space, the operations it performs, the preferences a person sets for it, the capabilities it has, and
+/// the parameters the assembly chooses among them. Read against the <see cref="ApplicationFrame"/> by <see cref="ApplicationFrame.Validate"/>, which
 /// refuses an assembly that does not hold.
 /// <code>
 /// var documents = ModuleDeclaration.Compartmented&lt;DocumentsModule&gt;()
@@ -57,10 +57,12 @@ public sealed class ModuleDeclaration
     private readonly ImmutableList<Operation> _operations;
     private readonly ImmutableHashSet<ModuleCapability> _capabilities;
     private readonly ImmutableHashSet<ModuleCapability> _parameters;
+    private readonly ImmutableDictionary<string, Preference> _preferences;
 
     private ModuleDeclaration(
         Type module, string name, ModuleCompartments compartments, bool acceptsSharedSpace, ImmutableList<Operation> operations,
-        ImmutableHashSet<ModuleCapability> capabilities, ImmutableHashSet<ModuleCapability> parameters)
+        ImmutableHashSet<ModuleCapability> capabilities, ImmutableHashSet<ModuleCapability> parameters,
+        ImmutableDictionary<string, Preference> preferences)
     {
         Module = module;
         Name = name;
@@ -69,6 +71,7 @@ public sealed class ModuleDeclaration
         _operations = operations;
         _capabilities = capabilities;
         _parameters = parameters;
+        _preferences = preferences;
     }
 
     /// <summary>A module with compartments: it acts in a space the application gives it.</summary>
@@ -118,6 +121,12 @@ public sealed class ModuleDeclaration
     public IReadOnlySet<ModuleCapability> Parameters => _parameters;
 
     /// <summary>
+    /// The preferences the module declares, by key: <c>module.name</c>, such as <c>documents.view</c> — the key a
+    /// person's value is kept under. The module name in the key keeps two modules' preferences apart.
+    /// </summary>
+    public IReadOnlyDictionary<string, Preference> Preferences => _preferences;
+
+    /// <summary>
     /// Declares that the module serves the shared space, by its nature: Documents holds documents belonging to no
     /// compartment, Messaging the configuration every compartment falls back to. A group of the module's routes may
     /// still refuse it, administration routes for instance.
@@ -131,7 +140,7 @@ public sealed class ModuleDeclaration
                 $"{Name} is declared without compartments, and a module without compartments has no space, shared or not: "
                 + "declare it Compartmented<TModule>() or OptionallyCompartmented<TModule>() first.");
         }
-        return new(Module, Name, Compartments, acceptsSharedSpace: true, _operations, _capabilities, _parameters);
+        return new(Module, Name, Compartments, acceptsSharedSpace: true, _operations, _capabilities, _parameters, _preferences);
     }
 
     /// <summary>
@@ -157,13 +166,39 @@ public sealed class ModuleDeclaration
                     nameof(operations));
             }
         }
-        return new(Module, Name, Compartments, AcceptsSharedSpace, declared, _capabilities, _parameters);
+        return new(Module, Name, Compartments, AcceptsSharedSpace, declared, _capabilities, _parameters, _preferences);
+    }
+
+    /// <summary>
+    /// Declares the preferences a person sets for this module, each under the key <c>module.name</c>. Declaring the
+    /// same preference twice is harmless; declaring a name twice with two definitions is refused: a key names one
+    /// preference.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="preferences"/>, or one of them, is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A name is declared with two definitions.</exception>
+    public ModuleDeclaration WithPreferences(params IEnumerable<Preference> preferences)
+    {
+        var declared = _preferences;
+        foreach (var preference in Guard.NotNull(preferences))
+        {
+            Guard.NotNull(preference);
+            var key = $"{Name}.{preference.Name}";
+            if (!declared.TryGetValue(key, out var twin))
+                declared = declared.Add(key, preference);
+            else if (twin != preference)
+            {
+                throw new ArgumentException(
+                    $"{Name} declares the preference {preference.Name} twice, with two definitions: a key names one preference.",
+                    nameof(preferences));
+            }
+        }
+        return new(Module, Name, Compartments, AcceptsSharedSpace, _operations, _capabilities, _parameters, declared);
     }
 
     /// <summary>Declares that the module has <paramref name="capability"/>. Declaring it twice is harmless.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="capability"/> is <see langword="null"/>.</exception>
     public ModuleDeclaration WithCapability(ModuleCapability capability)
-        => new(Module, Name, Compartments, AcceptsSharedSpace, _operations, _capabilities.Add(Guard.NotNull(capability)), _parameters);
+        => new(Module, Name, Compartments, AcceptsSharedSpace, _operations, _capabilities.Add(Guard.NotNull(capability)), _parameters, _preferences);
 
     /// <summary>
     /// Turns <paramref name="capability"/> on, as the assembly's choice. Checked by
@@ -172,11 +207,12 @@ public sealed class ModuleDeclaration
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="capability"/> is <see langword="null"/>.</exception>
     public ModuleDeclaration WithParameter(ModuleCapability capability)
-        => new(Module, Name, Compartments, AcceptsSharedSpace, _operations, _capabilities, _parameters.Add(Guard.NotNull(capability)));
+        => new(Module, Name, Compartments, AcceptsSharedSpace, _operations, _capabilities, _parameters.Add(Guard.NotNull(capability)), _preferences);
 
     /// <summary>The module name.</summary>
     public override string ToString() => Name;
 
     private static ModuleDeclaration Create<TModule>(ModuleCompartments compartments) where TModule : IStellaegisModule
-        => new(typeof(TModule), NameRules.ModuleNameOf<TModule>(), compartments, acceptsSharedSpace: false, [], [], []);
+        => new(typeof(TModule), NameRules.ModuleNameOf<TModule>(), compartments, acceptsSharedSpace: false, [], [], [],
+            ImmutableDictionary.Create<string, Preference>(StringComparer.Ordinal));
 }

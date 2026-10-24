@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `Preference`, a preference a person sets for their own comfort and that only the clients read: `Choice`, `Color`,
+  `Number` and `Boolean`, each with an optional default, and `Validate(value)`, which accepts the canonical form only
+  and fails with `Preference.InvalidValueCode`. `ModuleDeclaration.WithPreferences(...)` declares a module's, under
+  the key `module.name` that `ModuleDeclaration.Preferences` exposes.
+
 ### Changed
 
 - `ApplicationFrame.Validate` refuses an operation identity declared by two modules, naming both: the identity is the

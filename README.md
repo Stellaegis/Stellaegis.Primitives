@@ -603,6 +603,16 @@ work done outside requests, a scheduled purge for instance. The declarations of 
 `services.GetStellaegisModules()`, are therefore the catalogue of what the application can do, readable with or
 without ASP.NET Core.
 
+A module also declares the **preferences** a person sets for it, for their own comfort — a view, a density —, that
+only the clients read. `Preference` defines one: `Choice("view", ["list", "grid"], "list")`, `Color("accent")`,
+`Number("zoom", 50, 200, 100)`, `Boolean("compact", false)`. A value travels and is stored as a string, in its
+canonical form only — `#3b82f6`, `120`, `true` —, and `preference.Validate(value)` refuses any other spelling with
+`Preference.InvalidValueCode`, never converting it. A preference may have no default: a client then applies its
+own. `WithPreferences(...)` puts each under the key `module.name`, `documents.view`, which the declaration exposes,
+`declaration.Preferences`; a name declared twice with two definitions is refused. An application declares its own
+preferences — a theme, an accent color — in its host's configuration, read by the preferences module into the same
+definition, under its name alone: `theme`, which no module key can be.
+
 A module also declares its **capabilities**: what it can do. Some depend on the database rather than on the
 module. `ModuleCapability.OwnerIsolation` says the module is compatible with the isolation by owner the frame
 declares: a module whose database isolates the data an actor owns holds it by a row-level security rule written for
