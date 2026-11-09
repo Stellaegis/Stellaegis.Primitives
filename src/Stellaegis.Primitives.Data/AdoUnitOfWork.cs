@@ -61,8 +61,10 @@ internal sealed class AdoUnitOfWork<TDatabase>(
         if (_transaction is not null)
             throw new InvalidOperationException("A transaction is already active.");
 
+        // A connection broken since the unit was opened lost what was set on it, the session context among it: opened
+        // again here, it would go on as nobody, in no space. The unit is opened anew instead.
         if (connection.State != ConnectionState.Open)
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("The connection of the unit of work is no longer open: open a new unit of work.");
 
         _transaction = isolationLevel == IsolationLevel.Unspecified
             ? await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false)

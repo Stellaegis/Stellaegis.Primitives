@@ -177,6 +177,23 @@ public sealed class DatabaseLifecycleTests : IAsyncLifetime
         Assert.Contains("the policy pl_widgets_space is missing on lcw.widgets", exception.Message);
     }
 
+    // Four installers at once — four instances deploying —: one failed on the grants before the lock.
+    [Fact]
+    public async Task Installations_at_once_wait_for_each_other()
+    {
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => InstallAsync(Acme)));
+
+        await VerifyAsync(Acme);
+    }
+
+    [Fact]
+    public async Task The_application_role_cannot_be_public()
+    {
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            DatabaseLifecycle.InstallAsync([Widgets()], Acme, OpenAdminAsync, "public", cancellationToken: Ct));
+        Assert.Contains("every role holds", exception.Message);
+    }
+
     private async Task AdministerAsync(string sql)
     {
         await using var admin = await OpenAsync(_admin, Ct);
@@ -266,6 +283,36 @@ public class ModuleDatabaseTests
     private sealed class WidgetsModule : IStellaegisModule
     {
         public static string Name => "widgets";
+    }
+
+    private sealed class GadgetsModule : IStellaegisModule
+    {
+        public static string Name => "gadgets";
+    }
+
+    [Fact]
+    public void A_module_has_a_schema_of_its_own()
+    {
+        Assert.Throws<ArgumentException>(() => ModuleDatabase.PostgreSql<WidgetsModule>("public"));
+        Assert.Throws<ArgumentException>(() => ModuleDatabase.SqlServer<WidgetsModule>("dbo"));
+    }
+
+    // Two modules on one schema would record their scripts in the same table, each reading the other's as applied with
+    // another content; one declaration twice is said as such.
+    [Fact]
+    public async Task Two_declarations_on_one_schema_are_refused()
+    {
+        var widgets = ModuleDatabase.PostgreSql<WidgetsModule>("shared").WithScripts([new SqlScript(1, "w", "select 1")]);
+        var gadgets = ModuleDatabase.PostgreSql<GadgetsModule>("shared").WithScripts([new SqlScript(1, "g", "select 1")]);
+        Task<System.Data.Common.DbConnection> Never(ModuleDatabase _, CancellationToken __) => throw new InvalidOperationException("never opened");
+
+        var shared = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            DatabaseLifecycle.VerifyAsync([widgets, gadgets], ApplicationFrame.SingleCompartment("acme"), Never, TestContext.Current.CancellationToken));
+        Assert.Contains("widgets and gadgets share the schema shared", shared.Message);
+
+        var twice = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            DatabaseLifecycle.InstallAsync([widgets, widgets], ApplicationFrame.SingleCompartment("acme"), Never, "app", cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Contains("The database of widgets is declared twice", twice.Message);
     }
 
     [Fact]

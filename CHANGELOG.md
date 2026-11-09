@@ -14,6 +14,7 @@ assembled one of these configurations now fails, at startup or at its first unit
 
 - `Actor.TryParseClaim`, the reading of an actor from a claim of a token: as `TryParse`, refusing `job:…` in any case,
   which only the code writes.
+- `StellaegisClientOptions.AllowPlainHttp`, which a client calling another machine in plain http declares.
 
 ### Fixed
 
@@ -46,6 +47,20 @@ assembled one of these configurations now fails, at startup or at its first unit
   one passed — made again from its name, it shed its flag and the refusal; `KeySlots.KeyOf` refuses a slot other
   than 1 and 2 instead of answering an empty key; `Result.Failure(Error.None)` is refused; an identity declared with
   and without a second factor says so.
+- **A refusal of an internal call reads as a failure of the installation.** `ReadErrorAsync` read a 401 or a 403 of
+  the service called as `Unauthorized` or `Forbidden`, and a client relayed it: the person behind the request was
+  answered 401 for the credentials of the host. Both now read as `Failure` — the caller answers 500 —, their code
+  kept. The body of the answer is read as untrusted: at most 64 KiB, as UTF-8 whatever its charset says — an
+  unknown one threw —, its media type compared without case, its code and message stripped of control and format
+  characters and cut.
+- **`.Hosting` — the base address of a client.** A query or a fragment, which the paths of the calls lost, and
+  credentials are refused; so is plain http to another machine, unless `AllowPlainHttp`; and a timeout beyond what
+  `HttpClient` takes, which failed at the first call.
+- **`.Data` — the installation.** Two installations of one schema at once wait for each other on a lock of the engine
+  — one failed on the grants; two declarations sharing a schema are refused, and one declaration twice is said as
+  such; the schemas `public` and `dbo`, and the role `public`, are refused. `BeginAsync` refuses a connection broken
+  since the unit of work opened, which it opened again without its session context; a connection whose opening
+  fails is disposed.
 - **`.Data` — a multiplexed PostgreSQL connection is refused in a space.** With `Multiplexing=true`, Npgsql sends
   each command outside a transaction on whichever physical connection is free: the session context set for one
   user — the space and the actor — was read by another's next command. `SessionContext.PostgreSql` refuses it, as it

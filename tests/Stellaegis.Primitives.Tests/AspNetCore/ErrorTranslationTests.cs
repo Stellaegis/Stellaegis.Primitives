@@ -129,8 +129,6 @@ public class ErrorTranslationTests
 
     [Theory]
     [InlineData(ErrorType.Validation)]
-    [InlineData(ErrorType.Unauthorized)]
-    [InlineData(ErrorType.Forbidden)]
     [InlineData(ErrorType.NotFound)]
     [InlineData(ErrorType.Conflict)]
     [InlineData(ErrorType.PreconditionFailed)]
@@ -145,6 +143,57 @@ public class ErrorTranslationTests
 
         Assert.Equal(written, read);
         Assert.Equal(written.Message, read!.Message);
+    }
+
+    // The call is the host's, with its own credentials: a refusal of them is a fault of the installation, which the
+    // person behind the request cannot mend by signing in again. It reads as a failure, its code kept.
+    [Theory]
+    [InlineData(ErrorType.Unauthorized)]
+    [InlineData(ErrorType.Forbidden)]
+    public async Task A_refusal_of_the_call_reads_as_a_failure_of_the_installation(ErrorType type)
+    {
+        var written = new Error("Access.Denied", "Refused.", type);
+        await using var app = await StartAsync(() => Result.Failure(written).ToHttpResult(), "Development");
+
+        using var response = await app.GetTestClient().GetAsync("/", Ct);
+        var read = (await response.ReadErrorAsync(Ct))!;
+
+        Assert.Equal(ErrorType.Failure, read.Type);
+        Assert.Equal("Access.Denied", read.Code);
+        Assert.Equal(StatusCodes.Status500InternalServerError, read.Type.ToStatusCode());
+    }
+
+    private static HttpResponseMessage Problem(string json, string mediaType = "application/problem+json", HttpStatusCode status = HttpStatusCode.BadRequest)
+        => new(status) { Content = new StringContent(json, System.Text.Encoding.UTF8, mediaType), ReasonPhrase = "Bad Request" };
+
+    // The body comes from another service: no line break of it reaches a log, nor a bidirectional override, and its
+    // size is bounded.
+    [Fact]
+    public async Task What_another_service_wrote_is_read_as_untrusted()
+    {
+        var injected = await Problem("""{"code":"Note.Code","detail":"line one\r\nFAKE LOG ENTRY \u202Eevil"}""").ReadErrorAsync(Ct);
+        Assert.Equal("line one FAKE LOG ENTRY evil", injected!.Message);
+
+        var cased = await Problem("""{"code":"Note.Code","detail":"x"}""", "Application/Problem+JSON").ReadErrorAsync(Ct);
+        Assert.Equal("Note.Code", cased!.Code);
+
+        var huge = await Problem($$"""{"code":"Note.Code","detail":"{{new string('a', ErrorReading.MaxProblemLength)}}"}""").ReadErrorAsync(Ct);
+        Assert.Equal(string.Empty, huge!.Code);
+        Assert.Equal("Bad Request", huge.Message);
+
+        var long_ = await Problem($$"""{"code":"Note.Code","detail":"{{new string('a', 5000)}}"}""").ReadErrorAsync(Ct);
+        Assert.Equal(ErrorReading.MaxMessageLength, long_!.Message.Length);
+    }
+
+    [Fact]
+    public async Task A_charset_the_runtime_does_not_know_still_reads_as_an_error()
+    {
+        var response = Problem("""{"code":"Note.Code","detail":"x"}""");
+        response.Content.Headers.ContentType!.CharSet = "no-such-charset";
+
+        var read = await response.ReadErrorAsync(Ct);
+
+        Assert.Equal("Note.Code", read!.Code);
     }
 
     [Fact]

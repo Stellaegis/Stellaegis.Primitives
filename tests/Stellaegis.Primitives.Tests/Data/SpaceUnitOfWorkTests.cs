@@ -63,6 +63,21 @@ public sealed class AdoSpaceUnitOfWorkTests : IAsyncLifetime
         Assert.Equal([Space.Of(Compartment.Parse("acme")), Space.Shared], asked);
     }
 
+    // A connection broken since the unit was opened lost its session context: opened again, it went on as nobody.
+    [Fact]
+    public async Task A_unit_whose_connection_closed_does_not_open_it_again()
+    {
+        DbConnection? opened = null;
+        var factory = new AdoSpaceUnitOfWorkFactory<WidgetsDatabase>(
+            async (_, ct) => opened = await _db.ProvideConnectionAsync(ct), SqliteTestDatabase.Registry(), SessionContext.None);
+
+        await using var uow = await factory.OpenAsync(Compartment.Parse("acme"), Jane, Ct);
+        await opened!.CloseAsync();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => uow.BeginAsync(Ct));
+        Assert.Contains("no longer open", exception.Message);
+    }
+
     [Fact]
     public async Task A_space_and_an_actor_are_required()
     {

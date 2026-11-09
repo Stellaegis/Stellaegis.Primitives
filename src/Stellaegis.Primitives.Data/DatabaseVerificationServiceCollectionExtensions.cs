@@ -75,7 +75,9 @@ public static class DatabaseVerificationServiceCollectionExtensions
         var registrations = services.GetServices<ModuleDatabaseRegistration>().ToList();
         if (registrations.Count == 0)
             return;
-        var openers = registrations.ToDictionary(registration => registration.Database, registration => registration.OpenAsApplication);
+        var openers = new Dictionary<ModuleDatabase, Func<IServiceProvider, CancellationToken, Task<DbConnection>>>();
+        foreach (var registration in registrations)
+            openers.TryAdd(registration.Database, registration.OpenAsApplication);   // twice, DatabaseLifecycle says so
         await DatabaseLifecycle.VerifyAsync(
             registrations.Select(registration => registration.Database),
             services.GetStellaegisFrame(),

@@ -323,6 +323,13 @@ public sealed class ModuleDatabase
         }
     }
 
+    // The default schema of an engine is everyone's: public on PostgreSQL, dbo on SQL Server. A module's is its own,
+    // granted to its application role alone.
     private static ModuleDatabase Create<TModule>(DatabaseEngine engine, string schema) where TModule : IStellaegisModule
-        => new(typeof(TModule), NameRules.ModuleNameOf<TModule>(), engine, CheckIdentifier(schema, "schema"), [], [], [], [], []);
+    {
+        var name = CheckIdentifier(schema, "schema");
+        if (name is "public" or "dbo")
+            throw new ArgumentException($"'{name}' is the default schema of an engine, shared by everything: a module has a schema of its own.", nameof(schema));
+        return new(typeof(TModule), NameRules.ModuleNameOf<TModule>(), engine, name, [], [], [], [], []);
+    }
 }

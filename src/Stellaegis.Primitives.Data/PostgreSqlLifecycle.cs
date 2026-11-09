@@ -22,6 +22,15 @@ internal sealed class PostgreSqlLifecycle : IEngineLifecycle
     {
     }
 
+    // A session-level advisory lock, keyed by the schema; the end of the session releases it as well.
+    public Task LockAsync(ModuleDatabase database, DbConnection connection, CancellationToken ct)
+        => ExecuteAsync(connection, null, "select pg_advisory_lock(hashtext(@key))", ct, ("key", LockKey(database)));
+
+    public Task UnlockAsync(ModuleDatabase database, DbConnection connection, CancellationToken ct)
+        => ExecuteAsync(connection, null, "select pg_advisory_unlock(hashtext(@key))", ct, ("key", LockKey(database)));
+
+    private static string LockKey(ModuleDatabase database) => $"stellaegis.install.{database.Schema}";
+
     public async Task InstallAsync(
         ModuleDatabase database, ApplicationFrame frame, DbConnection connection, string applicationRole, Actor actor,
         List<string> applied, List<string> skipped, CancellationToken ct)

@@ -320,6 +320,11 @@ work; the tests prove it against real engines. Npgsql can be told not to reset, 
 `SessionContext.PostgreSql` refuses both rather than hand one user's identity to the next. Under SQL Server, the read-only context cannot be changed inside the unit
 of work, and Microsoft.Data.SqlClient offers no way to skip the reset.
 
+⚠ Under PostgreSQL, the context is a setting the session may change: a statement of the unit of work running
+`set_config('stellaegis.space', ...)` reads another space afterwards. PostgreSQL has no read-only setting; the
+partition holds against what the application asks, not against SQL it lets a caller inject. A unit of work whose
+connection broke is not opened again — it would go on without its context —: `BeginAsync` refuses it.
+
 The session context is as trustworthy as the program that sets it. Set by a server, it states who the
 server authenticated. Set by a program running on a user's own machine, connected to the database
 directly, it is declared by the very user it names, and that user can connect with the same credentials
@@ -431,6 +436,12 @@ A script once applied is never corrected: a change of the schema is a script of 
 which the installation applies by running again, without dropping anything. A script applied with another content
 fails both the verification and the installation, which say so.
 
+Each module has a schema of its own, which holds the record of its scripts: two declarations on one schema are
+refused, and so are the default schemas of the engines, `public` and `dbo`, and `public` as the application role,
+which every role holds. Two installations of the same schema at once — two instances deploying — wait for each other,
+on a lock of the engine. Each numbered script runs in a transaction with its record: on PostgreSQL, a statement that
+cannot run in one — `create index concurrently`, an enum value added and used at once — has no place in a script.
+
 ### On SQL Server
 
 `ModuleDatabase.SqlServer<TModule>("schema")` declares the database of a module on SQL Server, LocalDB included, and
@@ -438,7 +449,8 @@ the same two executants install and verify it:
 
 - **a script is split into batches on its `go` lines**, a separator of the client tools that the engine does not
   know, and its batches run with its record in one transaction: the DDL of SQL Server is transactional, so a script
-  that fails leaves nothing behind;
+  that fails leaves nothing behind. The split knows neither comments nor strings, nor `go 2`: a line that is `go`
+  alone ends a batch wherever it stands;
 - **the application role is a database role**, which the installation creates when missing and the host makes its
   user a member of — a Windows account under integrated security, a SQL login elsewhere. The role is granted its
   rights on the schema, which reach what a later script creates, and `VIEW DEFINITION`, which the verification needs
@@ -690,7 +702,9 @@ services.AddStellaegisOptions<DocumentsDatabaseOptions>(configuration, "Stellaeg
 ```
 
 **HTTP clients.** A module served by another host is consumed through its port, implemented over HTTP by a client
-whose options derive from `StellaegisClientOptions` — a base address and a timeout, validated at startup:
+whose options derive from `StellaegisClientOptions` — a base address and a timeout, validated at startup. The base
+address is https, or http to the local machine — elsewhere only when `AllowPlainHttp` says so, the calls carrying
+tokens —, with a path but neither a query, a fragment nor credentials:
 
 ```csharp
 services.AddStellaegisHttpClient<ITemplateRenderer, HttpTemplateRenderer, RenderingClientOptions>(configuration, "Stellaegis:Rendering:Client");
@@ -1085,9 +1099,13 @@ if (await response.ReadErrorAsync(ct) is { } error)
         : new HttpRequestException($"The rendering API answered {error.Code}: {error.Message}", null, response.StatusCode);
 ```
 
-A status without a category of its own — 422, 429, a 502 from a proxy — reads as `Failure`. An answer that is
-not problem details, or whose message was hidden, reads with no code and the reason phrase as its message: the
-body is not copied, since nothing says what it holds.
+A status without a category of its own — 422, 429, a 502 from a proxy — reads as `Failure`. So do 401 and 403: the
+call is the host's, with its own credentials, and a refusal of them is a fault of the installation, which the person
+behind the request cannot mend by signing in again — their caller answers 500. The code is kept, so that a client
+whose service refuses by design, as a decision does, still reads it. An answer that is not problem details, or whose
+message was hidden, reads with no code and the reason phrase as its message: the body is not copied, since nothing
+says what it holds. The body comes from another service and is read as such: at most 64 KiB, its code and message
+stripped of control and format characters — no line break of it reaches a log — and cut.
 
 ## Modules written with controllers
 

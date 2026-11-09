@@ -155,6 +155,23 @@ public class HostingTests
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
+    [Theory]
+    [InlineData("https://rendering.internal/api?tenant=acme", "query or a fragment")]
+    [InlineData("https://rendering.internal/api#top", "query or a fragment")]
+    [InlineData("https://svc:secret@rendering.internal/api", "credentials")]
+    [InlineData("http://rendering.internal/api", "plain http")]
+    public void A_base_address_that_would_lose_its_path_leak_or_travel_in_clear_is_refused(string baseUrl, string error)
+        => Assert.Contains(error, new NotesClientOptions { BaseUrl = baseUrl }.FindError());
+
+    [Fact]
+    public void Plain_http_goes_to_the_local_machine_or_where_it_is_declared()
+    {
+        Assert.Null(new NotesClientOptions { BaseUrl = "http://localhost:5000/api" }.FindError());
+        Assert.Null(new NotesClientOptions { BaseUrl = "http://127.0.0.1/api" }.FindError());
+        Assert.Null(new NotesClientOptions { BaseUrl = "http://rendering.internal/api", AllowPlainHttp = true }.FindError());
+        Assert.Contains("beyond what HttpClient takes", new NotesClientOptions { BaseUrl = "https://x", Timeout = TimeSpan.FromDays(30) }.FindError());
+    }
+
     // Registered first, a purge started under an assembly that does not hold before the validation failed the host.
     [Fact]
     public async Task The_validation_runs_before_any_hosted_service_starts()

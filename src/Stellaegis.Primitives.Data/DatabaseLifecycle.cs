@@ -51,7 +51,15 @@ public static class DatabaseLifecycle
     /// </param>
     /// <param name="actor">The actor recorded with each script applied; <see cref="DefaultActor"/> unless given.</param>
     /// <param name="cancellationToken">Cancels the installation between two scripts.</param>
-    /// <exception cref="InvalidOperationException">A script was applied with another content, or the database is ahead of the package.</exception>
+    /// <remarks>
+    /// Two installations of the same schema at once wait for each other, on a lock of the engine held for the
+    /// installation of that schema.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="applicationRole"/> is <c>public</c>, which every role holds.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A script was applied with another content, the database is ahead of the package, or two declarations share a
+    /// schema.
+    /// </exception>
     /// <exception cref="NotSupportedException">The engine of a database is not written in this package.</exception>
     public static async Task<InstallationReport> InstallAsync(
         IEnumerable<ModuleDatabase> databases,
@@ -64,14 +72,28 @@ public static class DatabaseLifecycle
         Guard.NotNull(frame);
         Guard.NotNull(openAsAdministrator);
         var role = ModuleDatabase.CheckIdentifier(applicationRole, "role");
+        if (string.Equals(role, "public", StringComparison.Ordinal))
+            throw new ArgumentException("The application role cannot be public: every role holds what public is granted.", nameof(applicationRole));
+        var declared = Declared(databases);
         var applied = new List<string>();
         var skipped = new List<string>();
 
-        foreach (var database in Guard.NotNull(databases).Select(database => Guard.NotNull(database)))
+        foreach (var database in declared)
         {
             var engine = Engine(database);
             await using var connection = await OpenAsync(openAsAdministrator, database, cancellationToken).ConfigureAwait(false);
-            await engine.InstallAsync(database, frame, connection, role, actor ?? DefaultActor, applied, skipped, cancellationToken).ConfigureAwait(false);
+            // Two installers at once — two instances deploying — wait for each other: the scripts are transactional,
+            // and the frame scripts and the grants that follow them are not. Measured: four at once, one failed on the
+            // grants with "tuple concurrently updated".
+            await engine.LockAsync(database, connection, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await engine.InstallAsync(database, frame, connection, role, actor ?? DefaultActor, applied, skipped, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                await engine.UnlockAsync(database, connection, CancellationToken.None).ConfigureAwait(false);
+            }
         }
         return new InstallationReport(applied, skipped);
     }
@@ -90,9 +112,10 @@ public static class DatabaseLifecycle
     {
         Guard.NotNull(frame);
         Guard.NotNull(open);
+        var declared = Declared(databases);
         var faults = new List<string>();
 
-        foreach (var database in Guard.NotNull(databases).Select(database => Guard.NotNull(database)))
+        foreach (var database in declared)
         {
             var engine = Engine(database);
             await using var connection = await OpenAsync(open, database, cancellationToken).ConfigureAwait(false);
@@ -108,14 +131,38 @@ public static class DatabaseLifecycle
         }
     }
 
+    // A module's schema holds its _schema_migrations: two declarations on one schema would record their scripts in the
+    // same table, and each read the other's as applied with another content. One declaration twice is said as such.
+    private static List<ModuleDatabase> Declared(IEnumerable<ModuleDatabase> databases)
+    {
+        var declared = Guard.NotNull(databases).Select(database => Guard.NotNull(database)).ToList();
+        foreach (var group in declared.GroupBy(database => (database.Engine, database.Schema)).Where(group => group.Count() > 1))
+        {
+            throw group.Distinct().Count() == 1
+                ? new InvalidOperationException($"The database of {group.First().Name} is declared twice: its adapter is registered once.")
+                : new InvalidOperationException(
+                    $"The databases of {string.Join(" and ", group.Select(database => database.Name).Distinct())} share the schema "
+                    + $"{group.Key.Schema}: each module has a schema of its own, which holds the record of its scripts.");
+        }
+        return declared;
+    }
+
     private static async Task<DbConnection> OpenAsync(
         Func<ModuleDatabase, CancellationToken, Task<DbConnection>> open, ModuleDatabase database, CancellationToken cancellationToken)
     {
         var connection = await open(database, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"No connection was opened for the database of {database.Name}.");
-        if (connection.State != System.Data.ConnectionState.Open)
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return connection;
+        try
+        {
+            if (connection.State != System.Data.ConnectionState.Open)
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     private static IEngineLifecycle Engine(ModuleDatabase database) => database.Engine switch
@@ -129,6 +176,12 @@ public static class DatabaseLifecycle
 /// <summary>What an engine must do for the life cycle: install under an administration role, verify under the application's.</summary>
 internal interface IEngineLifecycle
 {
+    /// <summary>Takes the lock of the installation of <paramref name="database"/>'s schema, waiting for another installer holding it.</summary>
+    Task LockAsync(ModuleDatabase database, DbConnection connection, CancellationToken ct);
+
+    /// <summary>Releases what <see cref="LockAsync"/> took.</summary>
+    Task UnlockAsync(ModuleDatabase database, DbConnection connection, CancellationToken ct);
+
     Task InstallAsync(
         ModuleDatabase database, ApplicationFrame frame, DbConnection connection, string applicationRole, Actor actor,
         List<string> applied, List<string> skipped, CancellationToken cancellationToken);

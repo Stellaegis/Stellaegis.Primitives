@@ -19,6 +19,21 @@ internal sealed partial class SqlServerLifecycle : IEngineLifecycle
     {
     }
 
+    // An application lock owned by the session, keyed by the schema; the end of the session releases it as well.
+    public async Task LockAsync(ModuleDatabase database, DbConnection connection, CancellationToken ct)
+    {
+        var status = await ScalarAsync(connection,
+            "declare @status int; exec @status = sp_getapplock @Resource = @key, @LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = -1; select @status",
+            ct, ("key", LockKey(database))).ConfigureAwait(false);
+        if (Convert.ToInt32(status, System.Globalization.CultureInfo.InvariantCulture) < 0)
+            throw new InvalidOperationException($"{database.Name}: the lock of the installation of schema {database.Schema} was not granted ({status}).");
+    }
+
+    public Task UnlockAsync(ModuleDatabase database, DbConnection connection, CancellationToken ct)
+        => ExecuteAsync(connection, null, "exec sp_releaseapplock @Resource = @key, @LockOwner = 'Session'", ct, ("key", LockKey(database)));
+
+    private static string LockKey(ModuleDatabase database) => $"stellaegis.install.{database.Schema}";
+
     public async Task InstallAsync(
         ModuleDatabase database, ApplicationFrame frame, DbConnection connection, string applicationRole, Actor actor,
         List<string> applied, List<string> skipped, CancellationToken ct)

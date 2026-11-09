@@ -15,19 +15,36 @@ namespace Stellaegis.Primitives.Hosting;
 /// </summary>
 public class StellaegisClientOptions : IValidatableOptions
 {
-    /// <summary>The base address of the host serving the module, an absolute http or https URL.</summary>
+    /// <summary>
+    /// The base address of the host serving the module, an absolute https URL — http to the local machine, or wherever
+    /// <see cref="AllowPlainHttp"/> says so —, a path but neither a query, a fragment nor credentials.
+    /// </summary>
     public string BaseUrl { get; set; } = string.Empty;
 
-    /// <summary>The timeout of each call. One minute unless set.</summary>
+    /// <summary>The timeout of each call. One minute unless set; at most what <see cref="HttpClient"/> takes.</summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Whether <see cref="BaseUrl"/> may be plain http to another machine — a network the host trusts, a mesh that
+    /// encrypts for it. The calls carry tokens: refused unless declared.
+    /// </summary>
+    public bool AllowPlainHttp { get; set; }
 
     /// <inheritdoc/>
     public virtual string? FindError()
     {
         if (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             return "BaseUrl is required, as an absolute http or https URL.";
+        if (uri.Query.Length > 0 || uri.Fragment.Length > 0)
+            return "BaseUrl carries a query or a fragment, which the paths of the calls would lose: give the address and its path only.";
+        if (uri.UserInfo.Length > 0)
+            return "BaseUrl carries credentials, which a log would show: the client authenticates otherwise.";
+        if (uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback && !AllowPlainHttp)
+            return "BaseUrl is plain http to another machine, and the calls carry tokens: use https, or declare AllowPlainHttp.";
         if (Timeout <= TimeSpan.Zero)
             return "Timeout must be positive.";
+        if (Timeout.TotalMilliseconds > int.MaxValue)
+            return $"Timeout is {Timeout}, beyond what HttpClient takes: at most {TimeSpan.FromMilliseconds(int.MaxValue)}.";
         return null;
     }
 }
