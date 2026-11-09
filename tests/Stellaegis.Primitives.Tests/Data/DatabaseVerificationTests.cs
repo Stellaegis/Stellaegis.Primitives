@@ -51,7 +51,16 @@ public sealed class DatabaseVerificationTests : IAsyncLifetime
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
+    // The application connects with its own role: the verification refuses a superuser, which row-level security
+    // does not bind.
     private async Task<DbConnection> OpenAsync(CancellationToken ct)
+    {
+        var connection = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(_connectionString) { Username = AppRole, Password = AppRole }.ConnectionString);
+        await connection.OpenAsync(ct);
+        return connection;
+    }
+
+    private async Task<DbConnection> OpenAdminAsync(CancellationToken ct)
     {
         var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(ct);
@@ -82,7 +91,7 @@ public sealed class DatabaseVerificationTests : IAsyncLifetime
             Assert.Contains("gadgets is not installed", exception.Message);
         }
 
-        await DatabaseLifecycle.InstallAsync([Gadgets], Acme, (_, ct) => OpenAsync(ct), AppRole, cancellationToken: Ct);
+        await DatabaseLifecycle.InstallAsync([Gadgets], Acme, (_, ct) => OpenAdminAsync(ct), AppRole, cancellationToken: Ct);
 
         using (var host = BuildHost())
         {

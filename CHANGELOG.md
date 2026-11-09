@@ -23,6 +23,13 @@ assembled one of these configurations now fails, at startup or at its first unit
 - **`.Data` — a numbered script misnamed is refused.** `SqlScripts.FromResources` left out a resource under its
   prefix that did not match `0000_name.sql` — `0003_Add_Index.sql` was never installed, and the verification passed.
   A resource whose name starts with a digit and does not match now fails the declaration.
+- **`.Data` — the verification proves the isolation on PostgreSQL**, not only that the installation ran. It fails
+  when the application connects as a superuser, a `BYPASSRLS` role, a role owning the schema or one of its objects,
+  or one that may create objects there; when a table under row-level security carries a policy not declared, or a
+  policy of the frame written permissive; and, in a schema under row-level security, on a view that is not
+  `security_invoker`, a materialized view, or a `SECURITY DEFINER` function owned by a role the policies do not bind.
+  Each read every compartment while the verification passed. ⚠ A host — or a test — verifying under `postgres` now
+  fails: the application connects with the role the installation grants.
 - **`.Data` — the messages follow the rule of the numbered script.** A script applied with another content no longer
   advises dropping the schema or the database: a script once applied is never corrected, and a change is a script of
   its own, numbered after the last.

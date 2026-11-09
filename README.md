@@ -413,6 +413,13 @@ applied, or applied with another content, an extension or a policy the frame req
 declare, a table not under forced row-level security. It proves that the installation ran, and that nothing changed
 since.
 
+On PostgreSQL, it proves the isolation too, since row-level security binds only some roles and some readers. It fails
+when the application connects as a superuser, as a `BYPASSRLS` role, or as a role that owns the schema or one of its
+objects, or may create objects in it; when a table under row-level security carries a policy nobody declared, or a
+policy of the frame — which narrows — written permissive; and, in a schema under row-level security, on a view not
+created `with (security_invoker = true)`, a materialized view, or a `SECURITY DEFINER` function whose owner the
+policies do not bind. Each of these read every compartment while the verification passed.
+
 ```csharp
 await DatabaseLifecycle.InstallAsync(databases, AppFrame.Value, (_, ct) => adminSource.OpenConnectionAsync(ct).AsTask(), "myapp", ct: ct);
 await DatabaseLifecycle.VerifyAsync(databases, AppFrame.Value, (_, ct) => appSource.OpenConnectionAsync(ct).AsTask(), ct);

@@ -56,6 +56,7 @@ public sealed class DatabaseLifecycleTests : IAsyncLifetime
                 create role {AppRole} login password '{AppRole}';
               end if;
             end $$;
+            alter role {AppRole} nobypassrls;
             """;
         await command.ExecuteNonQueryAsync(Ct);
     }
@@ -174,6 +175,89 @@ public sealed class DatabaseLifecycleTests : IAsyncLifetime
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => VerifyAsync(Acme));
         Assert.Contains("lcw.widgets is not under forced row-level security", exception.Message);
         Assert.Contains("the policy pl_widgets_space is missing on lcw.widgets", exception.Message);
+    }
+
+    private async Task AdministerAsync(string sql)
+    {
+        await using var admin = await OpenAsync(_admin, Ct);
+        await using var command = admin.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync(Ct);
+    }
+
+    // Row-level security does not bind a superuser: the application connected as one read every compartment, and the
+    // verification passed.
+    [Fact]
+    public async Task The_application_connected_as_a_superuser_fails_the_verification()
+    {
+        await InstallAsync(Acme);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => VerifyAsync(Acme, asApplication: false));
+        Assert.Contains("a superuser, which row-level security does not bind", exception.Message);
+    }
+
+    [Fact]
+    public async Task The_application_role_bypassing_owning_or_creating_fails_the_verification()
+    {
+        await InstallAsync(Acme);
+        await AdministerAsync($"alter role {AppRole} bypassrls; alter table lcw.widget_tags owner to {AppRole}; grant create on schema lcw to {AppRole}");
+        try
+        {
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => VerifyAsync(Acme));
+            Assert.Contains($"connects as {AppRole}, which bypasses row-level security (BYPASSRLS)", exception.Message);
+            Assert.Contains($"which owns widget_tags in lcw", exception.Message);
+            Assert.Contains("which may create objects in lcw", exception.Message);
+        }
+        finally
+        {
+            await AdministerAsync($"alter role {AppRole} nobypassrls");
+        }
+    }
+
+    // Policies add up: one more, permissive, opens what the declared ones keep closed — measured, the application of
+    // acme then read every widget.
+    [Fact]
+    public async Task A_policy_not_declared_fails_the_verification()
+    {
+        await InstallAsync(Acme);
+        await AdministerAsync("create policy pl_open on lcw.widgets using (true)");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => VerifyAsync(Acme));
+        Assert.Contains("the policy pl_open on lcw.widgets is not declared", exception.Message);
+    }
+
+    // A policy of the frame narrows: written permissive, it would widen what the space policy lets through.
+    [Fact]
+    public async Task A_policy_of_the_frame_written_permissive_fails_the_verification()
+    {
+        await InstallAsync(AcmeIsolated);
+        await AdministerAsync("""
+            drop policy pl_widgets_owner on lcw.widgets;
+            create policy pl_widgets_owner on lcw.widgets using (created_by = current_setting('stellaegis.actor', true));
+            """);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => VerifyAsync(AcmeIsolated));
+        Assert.Contains("the policy pl_widgets_owner on lcw.widgets follows the frame and is permissive", exception.Message);
+    }
+
+    // Installed by a superuser, a view reads its tables as its owner: measured, a view of acme returned the rows of
+    // globex. Declared security_invoker, it reads as the application.
+    [Fact]
+    public async Task What_reads_around_row_level_security_fails_the_verification()
+    {
+        await InstallAsync(Acme);
+        await AdministerAsync("""
+            create view lcw.widget_names as select name from lcw.widgets;
+            create view lcw.widget_names_invoker with (security_invoker = on) as select name from lcw.widgets;
+            create materialized view lcw.widget_count as select count(*) from lcw.widgets;
+            create function lcw.all_widgets() returns bigint language sql security definer as 'select count(*) from lcw.widgets';
+            """);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => VerifyAsync(Acme));
+        Assert.Contains("the view lcw.widget_names reads as its owner", exception.Message);
+        Assert.DoesNotContain("widget_names_invoker", exception.Message);
+        Assert.Contains("the materialized view lcw.widget_count", exception.Message);
+        Assert.Contains("the function lcw.all_widgets runs as an owner", exception.Message);
     }
 }
 

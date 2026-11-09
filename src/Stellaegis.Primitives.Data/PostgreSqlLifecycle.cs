@@ -5,9 +5,15 @@ namespace Stellaegis.Primitives.Data;
 
 /// <summary>
 /// The life cycle on PostgreSQL. The installation owns <c>{schema}._schema_migrations</c>; the verification reads
-/// it and the catalogue — <c>pg_extension</c>, <c>pg_class</c>, <c>pg_policies</c> —, which any role may read.
-/// Every name reaching the SQL text was checked as an identifier by <see cref="ModuleDatabase"/>.
+/// it and the catalogue — <c>pg_extension</c>, <c>pg_class</c>, <c>pg_policies</c>, <c>pg_roles</c>, <c>pg_proc</c> —,
+/// which any role may read. Every name reaching the SQL text was checked as an identifier by <see cref="ModuleDatabase"/>.
 /// </summary>
+/// <remarks>
+/// The verification proves the isolation, not only that the installation ran: row-level security binds the role
+/// the application connects with only if that role is neither a superuser nor <c>BYPASSRLS</c>, owns nothing in the
+/// schema and creates nothing there; and only the policies declared may apply, none written more widely, none read
+/// around by a view or a function running under its owner.
+/// </remarks>
 internal sealed class PostgreSqlLifecycle : IEngineLifecycle
 {
     public static PostgreSqlLifecycle Instance { get; } = new();
@@ -84,6 +90,8 @@ internal sealed class PostgreSqlLifecycle : IEngineLifecycle
             return;
         }
 
+        await VerifyApplicationRoleAsync(connection, database, faults, ct).ConfigureAwait(false);
+
         var recorded = await ReadRecordedAsync(connection, database, ct).ConfigureAwait(false);
         foreach (var script in database.Scripts)
         {
@@ -130,7 +138,128 @@ internal sealed class PostgreSqlLifecycle : IEngineLifecycle
                     faults.Add($"{database.Name}: the policy {policy.Policy} on {policy.Table} is present, and the frame does not declare {frameScript.Feature}");
             }
         }
+
+        if (database.SecuredTables.Count > 0)
+        {
+            await VerifyPoliciesAsync(connection, database, frame, faults, ct).ConfigureAwait(false);
+            await VerifyReadersAroundAsync(connection, database, faults, ct).ConfigureAwait(false);
+        }
     }
+
+    // Row-level security binds a role that is neither a superuser nor BYPASSRLS, and that owns nothing it could
+    // unforce or drop: the role the application connects with is proven to be one. Measured: connected as postgres, as
+    // a BYPASSRLS role or as the owner of the schema, the application of acme read the rows of every compartment, and
+    // the verification passed.
+    private static async Task VerifyApplicationRoleAsync(DbConnection connection, ModuleDatabase database, List<string> faults, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            select r.rolsuper, r.rolbypassrls,
+                   coalesce(pg_has_role(current_user, n.nspowner, 'MEMBER'), false),
+                   coalesce(has_schema_privilege(current_user, n.oid, 'CREATE'), false),
+                   (select string_agg(c.relname, ', ' order by c.relname) from pg_class c
+                    where c.relnamespace = n.oid and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
+                      and pg_has_role(current_user, c.relowner, 'MEMBER')),
+                   current_user::text
+            from pg_roles r left join pg_namespace n on n.nspname = @schema
+            where r.rolname = current_user
+            """;
+        AddParameter(command, "schema", database.Schema);
+        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+            return;
+        var role = reader.GetString(5);
+        const string Advice = "the application connects with a role of its own, which the installation grants";
+        if (reader.GetBoolean(0))
+        {
+            faults.Add($"{database.Name}: the application connects as {role}, a superuser, which row-level security does not bind; {Advice}");
+            return;
+        }
+        if (reader.GetBoolean(1))
+            faults.Add($"{database.Name}: the application connects as {role}, which bypasses row-level security (BYPASSRLS); {Advice}");
+        if (reader.GetBoolean(2))
+            faults.Add($"{database.Name}: the application connects as {role}, which owns the schema {database.Schema}; {Advice}");
+        if (!reader.IsDBNull(4))
+            faults.Add($"{database.Name}: the application connects as {role}, which owns {reader.GetString(4)} in {database.Schema}; {Advice}");
+        if (reader.GetBoolean(3))
+            faults.Add($"{database.Name}: the application connects as {role}, which may create objects in {database.Schema}; {Advice}");
+    }
+
+    // Policies add up: a permissive one more opens what the declared ones keep closed, whatever its name. Every policy
+    // of a secured table is declared, by the module or by the frame; a policy of the frame narrows, and is restrictive.
+    private static async Task VerifyPoliciesAsync(DbConnection connection, ModuleDatabase database, ApplicationFrame frame, List<string> faults, CancellationToken ct)
+    {
+        var declared = database.Policies
+            .Concat(database.FrameScripts.Where(script => frame.Declares(script.Feature)).SelectMany(script => script.Policies))
+            .ToHashSet();
+        var narrowing = database.FrameScripts.SelectMany(script => script.Policies).ToHashSet();
+        foreach (var table in database.SecuredTables)
+        {
+            var parts = table.Split('.');
+            await using var command = connection.CreateCommand();
+            command.CommandText = "select policyname, permissive from pg_policies where schemaname = @schema and tablename = @table order by policyname";
+            AddParameter(command, "schema", parts[0]);
+            AddParameter(command, "table", parts[1]);
+            await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                var policy = new RowPolicy(table, reader.GetString(0));
+                var restrictive = string.Equals(reader.GetString(1), "RESTRICTIVE", StringComparison.OrdinalIgnoreCase);
+                if (!declared.Contains(policy) && !narrowing.Contains(policy))
+                    faults.Add($"{database.Name}: the policy {policy.Policy} on {table} is not declared; every policy of a table under row-level security is");
+                else if (narrowing.Contains(policy) && !restrictive)
+                    faults.Add($"{database.Name}: the policy {policy.Policy} on {table} follows the frame and is permissive; it narrows, and is written as restrictive");
+            }
+        }
+    }
+
+    // A view reads its tables as its owner unless it is security_invoker, and a materialized view holds the rows of
+    // whoever refreshed it: in a schema under row-level security, either reads around the policies. So does a
+    // SECURITY DEFINER function whose owner is not bound by them. Measured: installed as postgres, a view of acme
+    // returned the rows of globex, and the verification passed.
+    private static async Task VerifyReadersAroundAsync(DbConnection connection, ModuleDatabase database, List<string> faults, CancellationToken ct)
+    {
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                select c.relname, c.relkind::text, coalesce(c.reloptions, '{}'::text[])
+                from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                where n.nspname = @schema and c.relkind in ('v', 'm')
+                order by c.relname
+                """;
+            AddParameter(command, "schema", database.Schema);
+            await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                var name = $"{database.Schema}.{reader.GetString(0)}";
+                if (reader.GetString(1) == "m")
+                    faults.Add($"{database.Name}: the materialized view {name} holds rows outside row-level security; a schema under it has none");
+                else if (!IsSecurityInvoker((string[])reader.GetValue(2)))
+                    faults.Add($"{database.Name}: the view {name} reads as its owner, around row-level security; create it with (security_invoker = true)");
+            }
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                select p.proname from pg_proc p
+                join pg_namespace n on n.oid = p.pronamespace
+                join pg_roles r on r.oid = p.proowner
+                where n.nspname = @schema and p.prosecdef and (r.rolsuper or r.rolbypassrls)
+                order by p.proname
+                """;
+            AddParameter(command, "schema", database.Schema);
+            await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                faults.Add($"{database.Name}: the function {database.Schema}.{reader.GetString(0)} runs as an owner row-level security does not bind (SECURITY DEFINER)");
+        }
+    }
+
+    // PostgreSQL keeps the option as written: true, on, yes, 1, in any case.
+    private static bool IsSecurityInvoker(string[] options)
+        => options.Any(option => option.Split('=', 2) is [var key, var value]
+            && string.Equals(key.Trim(), "security_invoker", StringComparison.OrdinalIgnoreCase)
+            && value.Trim().ToLowerInvariant() is "true" or "on" or "yes" or "1" or "t" or "y");
 
     // The application reads and writes data, reads the scripts applied, and creates nothing: what a script creates
     // later is granted by the default privileges of the installing role, in the schema.
