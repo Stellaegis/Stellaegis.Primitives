@@ -6,10 +6,10 @@
     <!-- Data -->
     <PackageVersion Include="Dapper" Version="2.1.89" />
     <!-- Dependency injection -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.14" />
     <!-- Tests only: a real generic host, to prove what the hosted services do at startup -->
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
     <!-- Testing -->
