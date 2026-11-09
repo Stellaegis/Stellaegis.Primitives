@@ -34,6 +34,16 @@ public class KeySlotsTests
     }
 
     [Fact]
+    public void A_slot_outside_1_and_2_has_no_key_not_even_an_empty_one()
+    {
+        var slots = new KeySlots { Keys = { [1] = "first" } };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => slots.KeyOf(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => slots.KeyOf(3));
+        Assert.Equal(string.Empty, slots.KeyOf(2));
+    }
+
+    [Fact]
     public void The_active_slot_needs_a_key()
     {
         Assert.Contains("No key is configured for the active slot 2: set Keys:2", new KeySlots { Keys = { [1] = "first" }, ActiveKeySlot = 2 }.FindError());

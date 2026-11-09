@@ -76,6 +76,15 @@ public static class StellaegisServiceProviderExtensions
     /// </exception>
     public static void ValidateStellaegisModules(this IServiceProvider services)
     {
+        // A frame registered again, by AddSingleton after AddStellaegisFrame, would replace it in silence, and leave the
+        // compartment directory listing the first.
+        var frames = Guard.NotNull(services).GetServices<ApplicationFrame>().ToList();
+        if (frames.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"{frames.Count} application frames are registered ({string.Join("; ", frames)}): an application declares its "
+                + "frame once, with AddStellaegisFrame(...).");
+        }
         var frame = services.GetStellaegisFrame();
         frame.Validate(services.GetStellaegisModules());
         CheckCompartmentDirectory(services, frame);
@@ -91,6 +100,15 @@ public static class StellaegisServiceProviderExtensions
                 throw new InvalidOperationException(
                     $"A compartment directory is registered, and the application frame ({frame}) has no compartments to list: "
                     + "remove it, or declare the application's compartments.");
+            case CompartmentCount.Single when directories.Count == 0:
+                throw new InvalidOperationException(
+                    $"The application frame ({frame}) has a single compartment and no directory lists it: register the frame with "
+                    + "AddStellaegisFrame(...), which registers its directory.");
+            case CompartmentCount.Single when directories[0] is FixedCompartmentDirectory fixedDirectory
+                && directories.Count == 1 && fixedDirectory.Compartment != frame.FixedCompartment:
+                throw new InvalidOperationException(
+                    $"The compartment directory lists {fixedDirectory.Compartment}, and the application frame ({frame}) has "
+                    + $"{frame.FixedCompartment}: the frame was registered again. Declare it once, with AddStellaegisFrame(...).");
             case CompartmentCount.Single when directories.Count > 1 || directories[0] is not FixedCompartmentDirectory:
                 throw new InvalidOperationException(
                     $"A compartment directory is registered beside the one of the application frame ({frame}): with a single "

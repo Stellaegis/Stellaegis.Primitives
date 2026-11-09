@@ -93,6 +93,10 @@ public class ModuleDeclarationTests
         var exception = Assert.Throws<InvalidOperationException>(() => ApplicationFrame.SingleCompartment("acme").Validate([messaging]));
         Assert.Contains("messaging is given a parameter that supposes a shared space, and the application has none: inherit_shared_space", exception.Message);
         Assert.Contains("WithSharedSpace()", exception.Message);
+
+        // The flag is the declared capability's: a parameter made again from its name does not shed it.
+        var named = ModuleDeclaration.Compartmented<MessagingModule>().WithCapability(inherits).WithParameter(InheritSharedSpace);
+        Assert.Throws<InvalidOperationException>(() => ApplicationFrame.SingleCompartment("acme").Validate([named]));
     }
 
     private static readonly Operation Read = new("documents", "read", OperationKind.Read);
@@ -115,6 +119,9 @@ public class ModuleDeclarationTests
             .WithOperations(Read, new Operation("documents", "read", OperationKind.Write)));
 
         Assert.Contains("documents declares documents.read twice, as Read and as Write", exception.Message);
+        var sensitive = Assert.Throws<ArgumentException>(() => ModuleDeclaration.Compartmented<DocumentsModule>()
+            .WithOperations(Read, new Operation("documents", "read", OperationKind.Read, requiresSecondFactor: true)));
+        Assert.Contains("documents.read twice, as Read, with and without a second factor", sensitive.Message);
         Assert.Throws<ArgumentNullException>(() => ModuleDeclaration.Compartmented<DocumentsModule>().WithOperations(null!));
         Assert.Throws<ArgumentNullException>(() => ModuleDeclaration.Compartmented<DocumentsModule>().WithOperations([null!]));
     }

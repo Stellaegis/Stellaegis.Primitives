@@ -162,11 +162,16 @@ public sealed class ModuleDeclaration
             else if (twin != operation)
             {
                 throw new ArgumentException(
-                    $"{Name} declares {operation.Identity} twice, as {twin.Kind} and as {operation.Kind}: an identity names one operation.",
+                    $"{Name} declares {operation.Identity} twice, {Describe(twin, operation)}: an identity names one operation.",
                     nameof(operations));
             }
         }
         return new(Module, Name, Compartments, AcceptsSharedSpace, declared, _capabilities, _parameters, _preferences);
+
+        static string Describe(Operation twin, Operation operation)
+            => twin.Kind == operation.Kind
+                ? $"as {operation.Kind}, with and without a second factor"
+                : $"as {twin.Kind} and as {operation.Kind}";
     }
 
     /// <summary>

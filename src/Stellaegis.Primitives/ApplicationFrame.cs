@@ -196,7 +196,10 @@ public sealed class ApplicationFrame
                     + $"{string.Join(", ", outside)}");
             }
 
-            var supposing = module.Parameters.Where(parameter => parameter.RequiresSharedSpace && module.Capabilities.Contains(parameter)).ToList();
+            // The flag is the declared capability's: a parameter made again from its name would not carry it.
+            var supposing = module.Parameters
+                .Where(parameter => module.Capabilities.FirstOrDefault(capability => capability == parameter) is { RequiresSharedSpace: true })
+                .ToList();
             if (!HasSharedSpace && supposing.Count > 0)
             {
                 faults.Add($"{module.Name} is given {Plural(supposing.Count, "a parameter that supposes", "parameters that suppose")} "

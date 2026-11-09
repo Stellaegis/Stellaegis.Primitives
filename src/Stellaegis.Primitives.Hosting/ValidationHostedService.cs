@@ -10,7 +10,8 @@ public static class ValidationServiceCollectionExtensions
     /// <summary>
     /// Registers the validation of the frame against the modules
     /// (<see cref="StellaegisServiceProviderExtensions.ValidateStellaegisModules"/>) as the first thing the host
-    /// does when it starts: a host whose declarations do not hold fails to start, naming what to change. An
+    /// does when it starts — before any hosted service starts, whatever the order of their registrations: a host
+    /// whose declarations do not hold fails to start, naming what to change. An
     /// ASP.NET Core host validates by itself, with the startup check of its routes; a generic host calls this
     /// once. Registering it twice registers it once.
     /// <code>
@@ -25,14 +26,25 @@ public static class ValidationServiceCollectionExtensions
     }
 }
 
-/// <summary>Fails the host at startup when the frame and the modules do not hold together.</summary>
-internal sealed class ValidationHostedService(IServiceProvider services) : IHostedService
+/// <summary>
+/// Fails the host at startup when the frame and the modules do not hold together: while the host is starting, before
+/// any hosted service starts — a purge registered first would otherwise run under an assembly that does not hold.
+/// </summary>
+internal sealed class ValidationHostedService(IServiceProvider services) : IHostedLifecycleService
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    public Task StartingAsync(CancellationToken cancellationToken)
     {
         services.ValidateStellaegisModules();
         return Task.CompletedTask;
     }
 
+    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

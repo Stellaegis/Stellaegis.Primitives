@@ -12,6 +12,11 @@ namespace Stellaegis.Primitives.AspNetCore;
 /// <see cref="ClaimTypes.NameIdentifier"/> claim, then <c>sub</c>, and to the frame's anonymous actor when no user
 /// is authenticated.
 /// </summary>
+/// <remarks>
+/// A claim is read with <see cref="Actor.TryParseClaim"/>: a token naming a job, <c>job:…</c>, fails the request. So
+/// does an authenticated user whose actor is none, or is the frame's anonymous actor: the request would be recorded,
+/// and decided, as nobody's.
+/// </remarks>
 public sealed class RequestContextBuilder
 {
     private static readonly string[] DefaultActorClaims = [ClaimTypes.NameIdentifier, "sub"];
@@ -71,8 +76,9 @@ public sealed class RequestContextBuilder
     }
 
     /// <summary>
-    /// Reads the actor with a function of the request. When it returns <see langword="null"/>, the actor is
-    /// the frame's anonymous actor.
+    /// Reads the actor with a function of the request. When it returns <see langword="null"/> for an anonymous request,
+    /// the actor is the frame's anonymous actor; for an authenticated user, the request fails. A function reading a
+    /// claim reads it with <see cref="Actor.TryParseClaim"/>.
     /// </summary>
     public RequestContextBuilder ActorFrom(Func<HttpContext, Actor?> source)
     {
@@ -112,9 +118,9 @@ public sealed class RequestContextBuilder
             return null;
 
         var identifier = value.TrimStart().StartsWith('{') ? SubjectOf(value, claimType) : value;
-        return Actor.TryParse(identifier, out var via)
+        return Actor.TryParseClaim(identifier, out var via)
             ? via
-            : throw new InvalidOperationException($"The {claimType} claim of the authenticated user does not name a valid actor.");
+            : throw new InvalidOperationException($"The {claimType} claim of the authenticated user does not name a valid actor, or names a job.");
     }
 
     // The act claim of a token exchange is an object: { "sub": "client" }, possibly nested in another act.
@@ -144,9 +150,9 @@ public sealed class RequestContextBuilder
         var names = string.Join(" or ", claimTypes);
         if (value is null)
             throw new InvalidOperationException($"The authenticated user has no {names} claim to read the actor from.");
-        return Actor.TryParse(value, out var actor)
+        return Actor.TryParseClaim(value, out var actor)
             ? actor
-            : throw new InvalidOperationException($"The {names} claim of the authenticated user is not a valid actor.");
+            : throw new InvalidOperationException($"The {names} claim of the authenticated user is not a valid actor, or names a job.");
     }
 }
 

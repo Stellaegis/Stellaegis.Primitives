@@ -93,6 +93,28 @@ public class RequestContextTests
         => await Assert.ThrowsAsync<InvalidOperationException>(() => EchoAsync(
             Acme, c => c.ActorFromClaim("oid"), TestApp.Request("/echo", (TestApp.NameIdentifier, "jane"))));
 
+    // A token naming a job would be taken for the installation; one named as the anonymous actor, for nobody.
+    [Theory]
+    [InlineData("job:install")]
+    [InlineData("anonymous")]
+    public async Task An_actor_claim_naming_a_job_or_the_anonymous_actor_fails_the_request(string value)
+        => await Assert.ThrowsAsync<InvalidOperationException>(() => EchoAsync(
+            Acme, null, TestApp.Request("/echo", ("sub", value))));
+
+    [Fact]
+    public async Task A_via_claim_naming_a_job_fails_the_request()
+        => await Assert.ThrowsAsync<InvalidOperationException>(() => EchoAsync(
+            Acme, c => c.ViaFromClaim("act"), TestApp.Request("/echo", ("sub", "jane"), ("act", "job:install"))));
+
+    // A function naming nobody for an authenticated user recorded the request as anonymous, in silence.
+    [Fact]
+    public async Task A_function_naming_no_actor_for_an_authenticated_user_fails_the_request()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => EchoAsync(
+            Acme, c => c.ActorFrom(_ => null), TestApp.Request("/echo", ("sub", "jane"))));
+        Assert.Equal("acme|anonymous", await EchoAsync(Acme, c => c.ActorFrom(_ => null), TestApp.Request("/echo")));
+    }
+
     [Fact]
     public async Task An_actor_claim_that_is_not_a_valid_actor_fails_the_request()
         => await Assert.ThrowsAsync<InvalidOperationException>(() => EchoAsync(

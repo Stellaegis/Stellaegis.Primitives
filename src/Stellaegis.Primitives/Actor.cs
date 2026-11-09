@@ -76,6 +76,18 @@ public sealed class Actor : IEquatable<Actor>, IParsable<Actor>
         => TryParse(s, out result);
 
     /// <summary>
+    /// Reads an actor from a claim of a token — <c>sub</c>, <c>client_id</c> —, a value the issuer of the token chose:
+    /// as <see cref="TryParse(string?, out Actor)"/>, and refusing a value only the code may write, <c>job:…</c> in any
+    /// case. A token naming a job would otherwise be taken for the installation, which a rights system lets do what no
+    /// person may.
+    /// </summary>
+    public static bool TryParseClaim([NotNullWhen(true)] string? s, [MaybeNullWhen(false)] out Actor result)
+    {
+        result = IsValid(s) && !s.StartsWith(JobPrefix, StringComparison.OrdinalIgnoreCase) ? new Actor(s, via: null) : null;
+        return result is not null;
+    }
+
+    /// <summary>
     /// The actor of a piece of work done outside requests, <c>job:</c> followed by <paramref name="name"/> — a
     /// scheduled purge, an import. The name is an identifier, <see cref="NameRules.IdentifierRule"/>.
     /// </summary>

@@ -10,6 +10,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 A security release: what an assembly forgot, or a configuration allowed, no longer opens anything. ⚠ A host that
 assembled one of these configurations now fails, at startup or at its first unit of work, saying what to change.
 
+### Added
+
+- `Actor.TryParseClaim`, the reading of an actor from a claim of a token: as `TryParse`, refusing `job:…` in any case,
+  which only the code writes.
+
 ### Fixed
 
 - **`.AspNetCore` — a route of a module carries an operation or declares its authorization.** The startup check
@@ -25,6 +30,22 @@ assembled one of these configurations now fails, at startup or at its first unit
   principal becomes anonymous. The startup check, which registering an admission now registers, fails a host that
   registers admissions and never calls `UseStellaegisActorAdmission()` — a branch of `UseWhen` counts —, or replaces
   the policy evaluator after them.
+- **The actor of a token cannot be a job, nor the anonymous actor.** A token whose `sub` was `job:install` became the
+  actor of the installation, which a rights system lets do what no person may — `Stellaegis.Registry` lifts its
+  bounds for `job:`. The request context reads its claims with `Actor.TryParseClaim`, and fails a request whose
+  claim names a job or the anonymous actor of the frame, or whose `ActorFrom` function names nobody for an
+  authenticated user — it was recorded as anonymous, in silence.
+- **`.Hosting` — a frame registered again fails the validation.** `AddSingleton(ApplicationFrame…)` after
+  `AddStellaegisFrame` replaced the frame in silence, the compartment directory listing the first one. The
+  validation refuses more than one frame, a fixed directory listing another compartment than the frame's, and a
+  single-compartment frame without its directory — an index error until now.
+- **`.Hosting`, `.Data` — the validation and the verification run before any hosted service starts**, while the host
+  is starting: a hosted service registered first started before the validation failed the host, and an ASP.NET Core
+  host served before its databases were verified.
+- **Smaller ones.** A parameter supposing a shared space is read on the capability the module declares, not on the
+  one passed — made again from its name, it shed its flag and the refusal; `KeySlots.KeyOf` refuses a slot other
+  than 1 and 2 instead of answering an empty key; `Result.Failure(Error.None)` is refused; an identity declared with
+  and without a second factor says so.
 - **`.Data` — a multiplexed PostgreSQL connection is refused in a space.** With `Multiplexing=true`, Npgsql sends
   each command outside a transaction on whichever physical connection is free: the session context set for one
   user — the space and the actor — was read by another's next command. `SessionContext.PostgreSql` refuses it, as it

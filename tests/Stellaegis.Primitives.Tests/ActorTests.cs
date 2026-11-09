@@ -135,4 +135,27 @@ public class ActorTests
         Assert.Equal("""{"jane":1}""", json);
         Assert.Equal(1, JsonSerializer.Deserialize<Dictionary<Actor, int>>(json)![Actor.Parse("jane")]);
     }
+
+    // A token naming a job would be taken for the installation, which a rights system lets do what no person may.
+    [Theory]
+    [InlineData("job:install")]
+    [InlineData("JOB:install")]
+    [InlineData("Job:purge")]
+    public void A_claim_naming_a_job_is_refused(string value)
+    {
+        Assert.False(Actor.TryParseClaim(value, out _));
+        Assert.True(Actor.TryParse(value, out _));   // the code may still read a job it wrote
+    }
+
+    [Theory]
+    [InlineData("0f8fad5bd9cb469fa16570867728950e")]
+    [InlineData("jane")]
+    [InlineData("svc:billing")]
+    public void A_claim_follows_the_actor_rule_otherwise(string value)
+    {
+        Assert.True(Actor.TryParseClaim(value, out var actor));
+        Assert.Equal(Actor.Parse(value), actor);
+        Assert.False(Actor.TryParseClaim(null, out _));
+        Assert.False(Actor.TryParseClaim(" jane", out _));
+    }
 }

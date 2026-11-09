@@ -142,6 +142,56 @@ public class HostingTests
         Assert.Contains("documents has compartments, and the application has none", exception.Message);
     }
 
+    private sealed class Recorder : IHostedService
+    {
+        public bool Started { get; private set; }
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            Started = true;
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    // Registered first, a purge started under an assembly that does not hold before the validation failed the host.
+    [Fact]
+    public async Task The_validation_runs_before_any_hosted_service_starts()
+    {
+        var recorder = new Recorder();
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddHostedService(_ => recorder);
+        builder.Services
+            .AddStellaegisFrame(ApplicationFrame.WithoutCompartments)
+            .AddStellaegisModule(ModuleDeclaration.Compartmented<DocumentsModule>())
+            .AddStellaegisValidation();
+        using var host = builder.Build();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync(Ct));
+        Assert.False(recorder.Started);
+    }
+
+    // AddSingleton after AddStellaegisFrame replaced the frame in silence, the directory still listing the first.
+    [Fact]
+    public void A_frame_registered_again_fails_the_validation()
+    {
+        var services = new ServiceCollection().AddStellaegisFrame(ApplicationFrame.SingleCompartment("acme"));
+        services.AddSingleton(ApplicationFrame.SingleCompartment("globex"));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => services.BuildServiceProvider().ValidateStellaegisModules());
+        Assert.Contains("2 application frames are registered", exception.Message);
+    }
+
+    [Fact]
+    public void A_single_compartment_frame_without_its_directory_fails_the_validation()
+    {
+        var services = new ServiceCollection().AddSingleton(ApplicationFrame.SingleCompartment("acme"));
+
+        var exception = Assert.Throws<InvalidOperationException>(() => services.BuildServiceProvider().ValidateStellaegisModules());
+        Assert.Contains("no directory lists it", exception.Message);
+    }
+
     [Fact]
     public async Task A_generic_host_whose_assembly_holds_starts()
     {

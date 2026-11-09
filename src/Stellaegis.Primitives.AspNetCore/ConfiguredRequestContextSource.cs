@@ -32,7 +32,13 @@ internal sealed class ConfiguredRequestContextSource(IHttpContextAccessor access
     private Actor Read()
     {
         var http = RequestContext.Current(accessor);
-        var actor = settings.Actor(http) ?? anonymous;
+        var authenticated = http.User.Identity?.IsAuthenticated == true;
+        var actor = settings.Actor(http);
+        if (authenticated && actor is null)
+            throw new InvalidOperationException("The actor source names no actor for the authenticated user: the request would be recorded as nobody's.");
+        if (authenticated && string.Equals(actor!.Value, anonymous.Value, StringComparison.Ordinal))
+            throw new InvalidOperationException($"The authenticated user is named '{anonymous}', the anonymous actor of the frame: the request would be taken for an anonymous one.");
+        actor ??= anonymous;
         return settings.Via?.Invoke(http) is { } via ? actor.Through(via) : actor;
     }
 }

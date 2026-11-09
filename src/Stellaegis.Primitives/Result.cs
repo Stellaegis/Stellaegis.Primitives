@@ -23,6 +23,8 @@ public class Result
             throw new InvalidOperationException("A successful result cannot contain an error.");
         if (!isSuccess && error is null)
             throw new InvalidOperationException("A failed result must contain an error.");
+        if (!isSuccess && error!.Type == ErrorType.None)
+            throw new InvalidOperationException("A failed result must contain an error, not Error.None, which is no error.");
 
         IsSuccess = isSuccess;
         Error = error;

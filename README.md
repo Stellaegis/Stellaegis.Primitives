@@ -172,7 +172,9 @@ characters, no control character, no leading or trailing whitespace. Use a stabl
 `sub` of a token, never an e-mail address or a name: modules copy it into every record they write, and
 deleting an account does not remove it from there. It does not tell users, machines and scheduled tasks apart; a
 prefix does, which the named factories write: `Actor.Job("purge")` is `job:purge`, the actor of a piece of work
-done outside requests.
+done outside requests. Only the code writes it: a value read from a token goes through `Actor.TryParseClaim`, which
+refuses `job:…` — a token naming a job would be taken for the installation, which a rights system lets do what no
+person may. `Actor.TryParse` stays for what the code itself wrote.
 
 Who answers for an operation and who performs it are not always the same: a client acting for a user after an
 OAuth token exchange, a worker running what a user asked for. The actor stays the one who answers, and the other is
@@ -699,8 +701,8 @@ services.AddStellaegisHttpClient<ITemplateRenderer, HttpTemplateRenderer, Render
 worker, a scheduled task — registers `AddStellaegisValidation()`, and fails to start when its declarations do not
 hold. The databases of the modules are verified the same way, under the application's role: an adapter registering
 its database with `AddStellaegisModuleDatabase(database, openAsApplication)` registers its verification too, so that
-no host serves a database it forgot to verify. An ASP.NET Core host, whose server starts before its hosted services,
-also calls `app.Services.VerifyStellaegisDatabasesAsync()` before running, to verify before serving anything.
+no host serves a database it forgot to verify. Both run while the host is starting, before any hosted service
+starts — the server of an ASP.NET Core host included —, whatever the order of the registrations.
 
 ```csharp
 var builder = Host.CreateApplicationBuilder(args);
@@ -764,7 +766,8 @@ is `anonymous` when no user is authenticated; the frame's `WithAnonymousActor` c
 refuses a request for lack of an actor: whether a request needs an authenticated user is decided by the
 security the application attaches to the routes. An authenticated user without the claim, or with a
 value that is not a valid `Actor`, fails the request: the claim chosen is the wrong one, and recording
-the request as anonymous would attribute it to nobody.
+the request as anonymous would attribute it to nobody. So does a claim naming a job, `job:…`, or the anonymous actor
+of the frame, and an `ActorFrom` function naming nobody for an authenticated user.
 
 ### The shared space
 

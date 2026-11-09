@@ -64,4 +64,11 @@ public class ResultTests
         Assert.Contains("\"value\":\"text\"", json);
         Assert.DoesNotContain("\"Value\"", json);
     }
+
+    [Fact]
+    public void A_failure_carries_an_error_and_not_Error_None()
+    {
+        Assert.Throws<InvalidOperationException>(() => Result.Failure(Error.None));
+        Assert.Throws<InvalidOperationException>(() => Result.Failure<int>(Error.None));
+    }
 }

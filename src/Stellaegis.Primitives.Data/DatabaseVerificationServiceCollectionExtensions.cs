@@ -45,9 +45,8 @@ public static class DatabaseVerificationServiceCollectionExtensions
     /// it again registers it once.
     /// </summary>
     /// <remarks>
-    /// A generic host runs its hosted services before anything else. An ASP.NET Core host starts its server
-    /// first: to verify before serving a request, call <see cref="VerifyStellaegisDatabasesAsync"/> on the built
-    /// application instead, before running it.
+    /// The verification runs while the host is starting, before any hosted service starts — the server of an ASP.NET
+    /// Core host included —, so that nothing is served nor run on a database that does not hold.
     /// </remarks>
     public static IServiceCollection AddStellaegisDatabaseVerification(this IServiceCollection services)
     {
@@ -85,10 +84,21 @@ public static class DatabaseVerificationServiceCollectionExtensions
     }
 }
 
-/// <summary>Fails the host at startup when a module database does not hold with its declaration and the frame.</summary>
-internal sealed class DatabaseVerificationHostedService(IServiceProvider services) : IHostedService
+/// <summary>
+/// Fails the host at startup when a module database does not hold with its declaration and the frame: while the host
+/// is starting, before any hosted service starts — the server of an ASP.NET Core host included.
+/// </summary>
+internal sealed class DatabaseVerificationHostedService(IServiceProvider services) : IHostedLifecycleService
 {
-    public Task StartAsync(CancellationToken cancellationToken) => services.VerifyStellaegisDatabasesAsync(cancellationToken);
+    public Task StartingAsync(CancellationToken cancellationToken) => services.VerifyStellaegisDatabasesAsync(cancellationToken);
+
+    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

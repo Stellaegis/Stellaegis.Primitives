@@ -36,10 +36,16 @@ public sealed class KeySlots
     /// an empty string, as long as nothing was written under it.
     /// </summary>
     /// <exception cref="InvalidOperationException"><paramref name="slot"/> is the active slot and has no key, or the slots do not hold.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="slot"/> is not 1 or 2 — a slot read from a stored row, corrupted —: an empty key would encrypt or
+    /// derive as well as a real one.
+    /// </exception>
     public string KeyOf(int slot)
     {
         if (FindError() is { } error)
             throw new InvalidOperationException(error);
+        if (slot is < 1 or > SlotCount)
+            throw new ArgumentOutOfRangeException(nameof(slot), slot, $"The slots are 1 and {SlotCount}.");
         return Keys.TryGetValue(slot, out var key) && !string.IsNullOrWhiteSpace(key) ? key : string.Empty;
     }
 
