@@ -15,6 +15,6 @@ alongside them, under their own license.
 
 `Stellaegis.Primitives` references nothing beyond .NET.
 
-Test-only dependencies (xUnit, Microsoft.NET.Test.Sdk, Microsoft.AspNetCore.TestHost, Microsoft.Extensions.Hosting, Microsoft.Data.Sqlite,
+Test-only dependencies (xUnit, Microsoft.AspNetCore.TestHost, Microsoft.Extensions.Hosting, Microsoft.Data.Sqlite,
 SQLitePCLRaw, Npgsql, Microsoft.Data.SqlClient, System.Security.Cryptography.Pkcs) are not part of any package
 and are not listed here.

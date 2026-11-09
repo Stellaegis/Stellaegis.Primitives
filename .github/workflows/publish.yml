@@ -67,7 +67,7 @@ jobs:
         env:
           STELLAEGIS_TEST_POSTGRESQL: Host=localhost;Username=postgres;Database=postgres
           STELLAEGIS_TEST_SQLSERVER: Server=localhost,1433;User Id=sa;Password=Stellaegis-Tests-1;TrustServerCertificate=true
-        run: dotnet test Stellaegis.Primitives.slnx -c Release
+        run: dotnet test --solution Stellaegis.Primitives.slnx -c Release --fail-skips on
 
       - name: Pack
         run: dotnet pack Stellaegis.Primitives.slnx -c Release
