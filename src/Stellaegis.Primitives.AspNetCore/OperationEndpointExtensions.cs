@@ -27,8 +27,9 @@ public static class OperationEndpointExtensions
     ///    .RequireAuthorizationPerOperation(op => op.ToString());
     /// </code>
     /// An application without rights of its own may choose by kind instead, a coarse fallback:
-    /// <c>op => op.Kind == OperationKind.Read ? "reader" : "writer"</c>. A route without an operation is left to the
-    /// host's fallback policy, if it sets one.
+    /// <c>op => op.Kind == OperationKind.Read ? "reader" : "writer"</c>. A route of a module without an operation
+    /// declares its own authorization, which the startup check requires; a route of no module is left to the host's
+    /// fallback policy, if it sets one.
     /// </summary>
     /// <remarks>
     /// A final convention: a group convention runs before a route has its own metadata, so only a final one

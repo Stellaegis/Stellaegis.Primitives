@@ -151,8 +151,8 @@ public class ModuleTests
             services => services.AddStellaegisStartupCheck().AddStellaegisModule(Rendering),
             routes =>
             {
-                routes.MapGroup("/one").BelongsTo<RenderingModule>().MapGet("/", () => "one");
-                routes.MapGroup("/two").BelongsTo<RenderingModule>().MapGet("/", () => "two");
+                routes.MapGroup("/one").BelongsTo<RenderingModule>().MapGet("/", () => "one").AllowAnonymous();
+                routes.MapGroup("/two").BelongsTo<RenderingModule>().MapGet("/", () => "two").AllowAnonymous();
             });
 
         Assert.Equal("two", await app.GetTestClient().GetStringAsync("/two", Ct));

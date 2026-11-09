@@ -873,9 +873,10 @@ rights of its own may choose by kind instead — `op => op.Kind == OperationKind
 a coarse fallback, which a module's separate administration routes keep from opening a purge.
 
 `RequireAuthorizationPerOperation` is a final convention: an ordinary group convention runs before a route
-has its own metadata, and could not see the operation. A route without an operation is left to the
-application's fallback policy, if it sets one; a route with one is not, since the fallback policy does not
-know the operation.
+has its own metadata, and could not see the operation. A route of a module carries an operation, or declares
+itself who may call it — `RequireAuthorization(...)`, `AllowAnonymous()` —: the startup check refuses one that does
+neither, since a forgotten label would otherwise leave it to a fallback policy the application may not set. A route
+of no module is left to that fallback policy, if the application sets one.
 
 ASP.NET Core runs final conventions when it builds its endpoints, at the first request. Do not add an
 endpoint filter from one: ASP.NET Core ignores it without an error.
@@ -1004,6 +1005,7 @@ routes and the way out, when:
   declaration accepting the shared space;
 - two routes share a name — ASP.NET Core would fail every request;
 - two module types carry the same name;
+- a route of a module carries no operation and declares no authorization, a fallback policy not counting;
 - a route labelled with an operation belongs to no module;
 - it declares no authorization — neither a requirement nor `AllowAnonymous()`, a fallback policy not
   counting;

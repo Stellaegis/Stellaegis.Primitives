@@ -409,6 +409,112 @@ public class OperationTests
             group => group.AllowAnyResource()));
     }
 
+    private static void OperationPolicies(IServiceCollection services) => services.AddAuthorization(options =>
+    {
+        options.AddPolicy("notes.read", policy => policy.RequireClaim("grant", "notes.read"));
+        options.AddPolicy("notes.write", policy => policy.RequireClaim("grant", "notes.write"));
+    });
+
+    // Measured before 5.6.0: the route answered 200 to an anonymous request.
+    [Fact]
+    public async Task A_route_of_a_module_without_operation_nor_authorization_fails_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => { services.AddNotes(); OperationPolicies(services); },
+            routes =>
+            {
+                var group = routes.MapNotesEndpoints().RequireAuthorizationPerOperation(op => op.ToString()).AllowAnyResource();
+                group.MapDelete("/purge", () => "purged");
+            }));
+
+        Assert.Contains("carry no operation and declare no authorization", exception.Message);
+        Assert.Contains("(notes)", exception.Message);
+    }
+
+    [Fact]
+    public async Task A_route_of_a_module_without_operation_declares_its_authorization_itself()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => { services.AddNotes(); OperationPolicies(services); },
+            routes =>
+            {
+                var group = routes.MapNotesEndpoints().RequireAuthorizationPerOperation(op => op.ToString()).AllowAnyResource();
+                group.MapGet("/health", () => "up").AllowAnonymous();
+                group.MapGet("/mine", () => "mine").RequireAuthorization();
+            });
+
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/notes/health")));
+        Assert.Equal(HttpStatusCode.Unauthorized, await StatusAsync(app, TestApp.Request("/notes/mine")));
+    }
+
+    // The fallback policy guards a route of no module, as before; for a route of a module, it does not count.
+    [Fact]
+    public async Task A_fallback_policy_does_not_stand_for_the_authorization_of_a_module_route()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => services.AddNotes().AddAuthorization(options =>
+            {
+                options.AddPolicy("member", policy => policy.RequireAuthenticatedUser());
+                options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+            }),
+            routes =>
+            {
+                var group = routes.MapNotesEndpoints().RequireAuthorizationPerOperation(_ => "member").AllowAnyResource();
+                group.MapGet("/unlabelled", () => "open");
+            }));
+    }
+
+    // Point 8 of the review of Identity: the check reads the endpoints once built, so that nested groups and final
+    // conventions are seen as ASP.NET Core applies them.
+    [Fact]
+    public async Task The_policy_of_an_enclosing_group_reaches_the_routes_of_a_nested_module()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => { services.AddNotes(); OperationPolicies(services); },
+            routes => routes.MapGroup("/api").RequireAuthorizationPerOperation(op => op.ToString())
+                .MapGroup("/v1").MapNotesEndpoints().AllowAnyResource());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await StatusAsync(app, TestApp.Request("/api/v1/notes/jane-1")));
+        Assert.Equal(HttpStatusCode.Forbidden, await StatusAsync(app, TestApp.Request("/api/v1/notes/jane-1", ("grant", "notes.write"))));
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/api/v1/notes/jane-1", ("grant", "notes.read"))));
+    }
+
+    [Fact]
+    public async Task Nested_groups_without_authorization_fail_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => TestApp.StartAsync(
+            services => { services.AddNotes(); OperationPolicies(services); },
+            routes => routes.MapGroup("/api").MapGroup("/v1").MapNotesEndpoints().AllowAnyResource()));
+
+        Assert.Contains("declare no authorization", exception.Message);
+    }
+
+    [Fact]
+    public async Task An_operation_set_by_a_final_convention_of_the_route_receives_its_policy()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => { services.AddNotes(); OperationPolicies(services); },
+            routes =>
+            {
+                var group = routes.MapGroup("/late").BelongsTo<NotesModule>().RequireRequestContext()
+                    .RequireAuthorizationPerOperation(op => op.ToString()).AllowAnyResource();
+                group.MapPost("/x", () => "x").Finally(endpoint => endpoint.Metadata.Add(NotesEndpoints.Write));
+            });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await StatusAsync(app, TestApp.Request(HttpMethod.Post, "/late/x")));
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request(HttpMethod.Post, "/late/x", ("grant", "notes.write"))));
+    }
+
+    [Fact]
+    public async Task AllowAnyResource_of_an_enclosing_group_reaches_the_routes_of_a_module()
+    {
+        await using var app = await TestApp.StartAsync(
+            services => { services.AddNotes(); OperationPolicies(services); },
+            routes => routes.MapGroup("/h").AllowAnyResource().RequireAuthorizationPerOperation(op => op.ToString()).MapNotesEndpoints());
+
+        Assert.Equal(HttpStatusCode.OK, await StatusAsync(app, TestApp.Request("/h/notes/jane-1", ("grant", "notes.read"))));
+    }
+
     [Fact]
     public async Task Only_the_routes_without_authorization_are_named()
     {

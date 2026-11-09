@@ -15,9 +15,10 @@ namespace Stellaegis.Primitives.AspNetCore;
 /// request context while its module is declared without compartments; when a route is in the shared space of an application without one; when two routes share a name; when two module types carry the same name; when a route is
 /// in the shared space without a declaration accepting it; when a route acting on spaces is in the shared space,
 /// belongs to no module or carries no operation; when a route labelled with an <see cref="Operation"/>
-/// belongs to no module; when it declares no authorization — neither a requirement nor
-/// <c>AllowAnonymous</c>; when it would refuse every resource — no authorization handler for operations, and no
-/// <c>AllowAnyResource</c>; or when it requires a policy that does not exist.
+/// belongs to no module; when a route of a module carries no operation and declares no authorization; when a labelled
+/// route declares no authorization — neither a requirement nor <c>AllowAnonymous</c>; when it would refuse every
+/// resource — no authorization handler for operations, and no <c>AllowAnyResource</c>; or when it requires a policy
+/// that does not exist.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -52,6 +53,7 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         CheckFrame(endpoints, frame);
         CheckSharedSpace(endpoints, modules);
         CheckSpacesRoutes(endpoints);
+        CheckUnlabelledModuleRoutes(endpoints);
         CheckOperations(services, endpoints);
     };
 
@@ -235,6 +237,24 @@ internal sealed class EndpointStartupCheck : IStartupFilter
                 $"These routes are labelled with an Operation and belong to no module: {Describe(orphans)}. "
                 + "Declare the module on their group with BelongsTo<TModule>(), or on their controller with [BelongsTo<TModule>], TModule being the IStellaegisModule "
                 + "that names it; an application's own routes declare a module of the application's.");
+        }
+    }
+
+    // A route of a module its author forgot to label escapes every check made on operations, and answered anyone a
+    // fallback policy did not stop: measured, DELETE /notes/purge in a group of the module answered 200 to an anonymous
+    // request. A route of a module carries an operation, or says itself who may call it.
+    private static void CheckUnlabelledModuleRoutes(IEnumerable<Endpoint> all)
+    {
+        var unlabelled = all
+            .Where(endpoint => endpoint.GetModule() is not null && endpoint.GetOperation() is null && !DeclaresAuthorization(endpoint))
+            .ToList();
+        if (unlabelled.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"These routes belong to a module, carry no operation and declare no authorization: {DescribeWithModule(unlabelled)}. "
+                + "Label each with the operation it performs, .WithMetadata(operation) or [Operation(...)], or declare who may "
+                + "call it, with RequireAuthorization(...) or .AllowAnonymous(). A fallback policy does not count: an "
+                + "application without one would serve the route to anyone.");
         }
     }
 

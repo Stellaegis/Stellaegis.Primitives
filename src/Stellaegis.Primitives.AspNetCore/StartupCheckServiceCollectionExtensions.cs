@@ -12,8 +12,8 @@ public static class StartupCheckServiceCollectionExtensions
     /// application frame and its modules do not hold together (<c>ValidateStellaegisModules</c>), when the request
     /// context disagrees with the frame, or when a route's declarations do not hold: it belongs to a module nothing
     /// declares; it reads the request context or addresses a shared space the frame does not have; two routes share a name; a route in the shared space is not declared to
-    /// accept it; a route labelled with an <see cref="Operation"/> belongs to no module, declares no
-    /// authorization, has neither an authorization handler for its resources nor allows any resource, or
+    /// accept it; a route of a module carries no operation and declares no authorization; a route labelled with an
+    /// <see cref="Operation"/> belongs to no module, declares no authorization, has neither an authorization handler for its resources nor allows any resource, or
     /// requires a policy that does not exist.
     /// </summary>
     /// <remarks>

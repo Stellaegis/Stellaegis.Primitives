@@ -336,7 +336,8 @@ public class RequestContextTests
     {
         var group = routes.MapGroup("/documents").BelongsTo<DocumentsModule>().RequireRequestContext(sharedSpace);
         group.MapGet("/{id}", (string id, IRequestContext context) =>
-            context.Space is { } space ? Results.Text($"{space}:{id}") : Results.NotFound());
+            context.Space is { } space ? Results.Text($"{space}:{id}") : Results.NotFound())
+            .AllowAnonymous();   // a route of a module carries an operation, or declares who may call it
         return group;
     }
 

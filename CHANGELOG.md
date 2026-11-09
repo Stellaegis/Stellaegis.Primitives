@@ -12,6 +12,12 @@ assembled one of these configurations now fails, at startup or at its first unit
 
 ### Fixed
 
+- **`.AspNetCore` — a route of a module carries an operation or declares its authorization.** The startup check
+  looked only at the routes labelled with an operation: a route of a module its author forgot to label escaped it,
+  and answered anyone a fallback policy did not stop — `DELETE /notes/purge`, 200 to an anonymous request. Such a
+  route now fails the startup unless it declares who may call it, `RequireAuthorization(...)` or `AllowAnonymous()`;
+  a fallback policy does not count. A route of no module is unchanged. The check reads the endpoints once built, so
+  that nested groups and final conventions are covered: tests now say so.
 - **`.Data` — a multiplexed PostgreSQL connection is refused in a space.** With `Multiplexing=true`, Npgsql sends
   each command outside a transaction on whichever physical connection is free: the session context set for one
   user — the space and the actor — was read by another's next command. `SessionContext.PostgreSql` refuses it, as it
