@@ -7,6 +7,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+A security release: what an assembly forgot, or a configuration allowed, no longer opens anything. ⚠ A host that
+assembled one of these configurations now fails, at startup or at its first unit of work, saying what to change.
+
+### Fixed
+
+- **`.Data` — a multiplexed PostgreSQL connection is refused in a space.** With `Multiplexing=true`, Npgsql sends
+  each command outside a transaction on whichever physical connection is free: the session context set for one
+  user — the space and the actor — was read by another's next command. `SessionContext.PostgreSql` refuses it, as it
+  refuses `No Reset On Close=true`.
+- **`.Data` — registering a module database registers its verification.** `AddStellaegisModuleDatabase` adds the
+  verification at startup that `AddStellaegisDatabaseVerification()` added, so that a host forgetting the latter no
+  longer serves a database lacking a rule the frame declares. A process that installs the databases does so before
+  starting a host.
+- **`.Data` — a numbered script misnamed is refused.** `SqlScripts.FromResources` left out a resource under its
+  prefix that did not match `0000_name.sql` — `0003_Add_Index.sql` was never installed, and the verification passed.
+  A resource whose name starts with a digit and does not match now fails the declaration.
+- **`.Data` — the messages follow the rule of the numbered script.** A script applied with another content no longer
+  advises dropping the schema or the database: a script once applied is never corrected, and a change is a script of
+  its own, numbered after the last.
+
 ## [5.5.0] — 2026-11-09
 
 ### Added

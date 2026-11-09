@@ -314,8 +314,8 @@ for an engine without a session context such as SQLite.
 
 Both engines reset a pooled connection before its next user, so a context never outlives its unit of
 work; the tests prove it against real engines. Npgsql can be told not to reset, with
-`No Reset On Close=true`: `SessionContext.PostgreSql` refuses such a connection rather than hand one
-user's identity to the next. Under SQL Server, the read-only context cannot be changed inside the unit
+`No Reset On Close=true`, or to send each command on whichever connection is free, with `Multiplexing=true`:
+`SessionContext.PostgreSql` refuses both rather than hand one user's identity to the next. Under SQL Server, the read-only context cannot be changed inside the unit
 of work, and Microsoft.Data.SqlClient offers no way to skip the reset.
 
 The session context is as trustworthy as the program that sets it. Set by a server, it states who the
@@ -418,8 +418,9 @@ await DatabaseLifecycle.InstallAsync(databases, AppFrame.Value, (_, ct) => admin
 await DatabaseLifecycle.VerifyAsync(databases, AppFrame.Value, (_, ct) => appSource.OpenConnectionAsync(ct).AsTask(), ct);
 ```
 
-While no real data exists, a script is corrected in place rather than followed by another: a script applied with
-another content fails both the verification and the installation, which says to reinstall.
+A script once applied is never corrected: a change of the schema is a script of its own, numbered after the last,
+which the installation applies by running again, without dropping anything. A script applied with another content
+fails both the verification and the installation, which say so.
 
 ### On SQL Server
 
@@ -689,14 +690,14 @@ services.AddStellaegisHttpClient<ITemplateRenderer, HttpTemplateRenderer, Render
 
 **Validation at startup.** An ASP.NET Core host validates the frame against the modules by itself. A generic host — a
 worker, a scheduled task — registers `AddStellaegisValidation()`, and fails to start when its declarations do not
-hold. The databases of the modules are verified the same way, under the application's role, with
-`AddStellaegisDatabaseVerification()` from `Stellaegis.Primitives.Data`, each adapter having registered its database
-with `AddStellaegisModuleDatabase(database, openAsApplication)`; an ASP.NET Core host, whose server starts before
-its hosted services, calls `app.Services.VerifyStellaegisDatabasesAsync()` before running instead.
+hold. The databases of the modules are verified the same way, under the application's role: an adapter registering
+its database with `AddStellaegisModuleDatabase(database, openAsApplication)` registers its verification too, so that
+no host serves a database it forgot to verify. An ASP.NET Core host, whose server starts before its hosted services,
+also calls `app.Services.VerifyStellaegisDatabasesAsync()` before running, to verify before serving anything.
 
 ```csharp
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddStellaegisFrame(AppFrame.Value).AddStellaegisValidation().AddStellaegisDatabaseVerification();
+builder.Services.AddStellaegisFrame(AppFrame.Value).AddStellaegisValidation();
 builder.Services.AddStellaegisDocumentsPostgreSQL(builder.Configuration);   // declares the module, its capability, its database
 builder.Services.AddHostedService<TerminatedTenantsPurge>();
 builder.Build().Run();

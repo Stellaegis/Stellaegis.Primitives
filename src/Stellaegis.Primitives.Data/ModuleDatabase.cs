@@ -71,16 +71,34 @@ public static partial class SqlScripts
     /// <summary>
     /// The numbered scripts embedded under <paramref name="resourcePrefix"/> in <paramref name="assembly"/>, such as
     /// <c>Stellaegis.Documents.PostgreSQL.Sql.PostgreSql</c> holding <c>0001_initial.sql</c>: ordered by version,
-    /// contiguous from 1.
+    /// contiguous from 1. Another resource under the prefix — a script following the frame — is left alone, unless its
+    /// name starts with a digit: a numbered script misnamed, <c>0003_Add_Index.sql</c> or <c>003_index.sql</c>, would
+    /// otherwise never be installed, and nothing would say so.
     /// </summary>
-    /// <exception cref="InvalidOperationException">No script is found, or the versions are not contiguous from 1.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// No script is found, a resource starting with a digit is not named <c>0000_name.sql</c>, or the versions are not
+    /// contiguous from 1.
+    /// </exception>
     public static IReadOnlyList<SqlScript> FromResources(Assembly assembly, string resourcePrefix)
     {
         Guard.NotNull(assembly);
         var prefix = Guard.NotWhiteSpace(resourcePrefix).TrimEnd('.') + ".";
-        var scripts = assembly.GetManifestResourceNames()
+        var resources = assembly.GetManifestResourceNames()
             .Where(name => name.StartsWith(prefix, StringComparison.Ordinal))
             .Select(name => (Name: name, Match: Numbered().Match(name[prefix.Length..])))
+            .ToList();
+        var misnamed = resources
+            .Where(resource => !resource.Match.Success && char.IsAsciiDigit(resource.Name[prefix.Length..].FirstOrDefault()))
+            .Select(resource => resource.Name[prefix.Length..])
+            .ToList();
+        if (misnamed.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"These resources under {prefix} in {assembly.GetName().Name} look like numbered scripts and are not named as one: "
+                + $"{string.Join(", ", misnamed)}. A numbered script is named 0000_name.sql — four digits, then lowercase letters, "
+                + "digits and underscores.");
+        }
+        var scripts = resources
             .Where(resource => resource.Match.Success)
             .Select(resource => new SqlScript(
                 int.Parse(resource.Match.Groups["version"].Value, System.Globalization.CultureInfo.InvariantCulture),
@@ -143,8 +161,9 @@ public sealed record FrameScript(FrameFeature Feature, string ApplyName, string 
 /// role that owns the schema, and the application runs under a role that has no DDL right. The installation
 /// records each script with its checksum in <c>{schema}._schema_migrations</c>, which it creates itself, and grants
 /// the application role what it needs; the verification reads that table and the catalogue of the engine, nothing
-/// more. A script applied with another content fails both: while no real data exists, a script is corrected in
-/// place and the database reinstalled.
+/// more. A script applied with another content fails both: a script once applied is never corrected, and a change
+/// of the schema is a script of its own, numbered after the last — the installation takes it by running again,
+/// without dropping anything.
 /// </para>
 /// <para>
 /// The adapter registers the declaration as a singleton of this type, beside its capabilities; the executants read

@@ -91,6 +91,20 @@ public sealed class DatabaseVerificationTests : IAsyncLifetime
         }
     }
 
+    // A host that forgets the verification would serve a database lacking a rule of isolation the frame declares.
+    [Fact]
+    public void Registering_a_module_database_registers_its_verification()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services
+            .AddStellaegisFrame(Acme)
+            .AddStellaegisModule(ModuleDeclaration.Compartmented<GadgetsModule>())
+            .AddStellaegisModuleDatabase(Gadgets, (_, ct) => OpenAsync(ct));
+        using var host = builder.Build();
+
+        Assert.Single(host.Services.GetServices<IHostedService>(), service => service is DatabaseVerificationHostedService);
+    }
+
     [Fact]
     public async Task An_application_without_a_module_database_has_nothing_to_verify()
     {

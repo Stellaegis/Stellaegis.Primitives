@@ -167,7 +167,7 @@ public sealed class SqlServerLifecycleTests : IAsyncLifetime
         Assert.Contains("widgets: 0001_widgets.sql was applied with another content", verification.Message);
 
         var installation = await Assert.ThrowsAsync<InvalidOperationException>(() => InstallAsync(changed));
-        Assert.Contains("recreate the database", installation.Message);
+        Assert.Contains("numbered after 0002_widget_tags.sql", installation.Message);
     }
 
     [Fact]

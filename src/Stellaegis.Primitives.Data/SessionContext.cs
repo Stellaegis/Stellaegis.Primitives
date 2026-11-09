@@ -17,8 +17,10 @@ namespace Stellaegis.Primitives.Data;
 /// </para>
 /// <para>
 /// Both engines reset a pooled connection before handing it to its next user, so the context never outlives
-/// the unit of work. Npgsql can be told not to, with <c>No Reset On Close=true</c>: <see cref="PostgreSql"/>
-/// refuses such a connection rather than hand one user's identity to the next.
+/// the unit of work. Npgsql can be told not to, with <c>No Reset On Close=true</c>; and with <c>Multiplexing=true</c>
+/// it sends each command outside a transaction on whichever physical connection is free, so that the context set by
+/// one command is read by another user's next. <see cref="PostgreSql"/> refuses both rather than hand one user's
+/// identity to the next.
 /// </para>
 /// </remarks>
 public sealed class SessionContext
@@ -60,13 +62,14 @@ public sealed class SessionContext
 
     /// <summary>
     /// PostgreSQL: <c>set_config</c> for the session. Refuses a connection whose string sets
-    /// <c>No Reset On Close=true</c>, with which Npgsql would hand the context to the next user of the connection.
+    /// <c>No Reset On Close=true</c> or <c>Multiplexing=true</c>, with which Npgsql would hand the context to another
+    /// user of the connection.
     /// </summary>
     public static SessionContext PostgreSql { get; } = new(
         "PostgreSQL",
         $"select set_config('{SpaceKey}', @space, false), set_config('{ActorKey}', @actor, false)",
         $"select set_config('{SpaceKey}', @space, false), set_config('{ActorKey}', @actor, false), set_config('{ViaKey}', @via, false)",
-        RefuseNoResetOnClose);
+        RefuseSharedSessions);
 
     /// <summary>
     /// Sets nothing: an engine without a session context, such as SQLite, or an application whose database reads
@@ -102,18 +105,26 @@ public sealed class SessionContext
         command.Parameters.Add(parameter);
     }
 
-    private static void RefuseNoResetOnClose(DbConnection connection)
+    // The keys Npgsql reads, with the spellings it accepts; a value it accepts is true or false, in any case.
+    private static void RefuseSharedSessions(DbConnection connection)
     {
         var settings = new DbConnectionStringBuilder { ConnectionString = connection.ConnectionString };
-        foreach (var key in (string[])["No Reset On Close", "NoResetOnClose"])
+        if (IsSet(settings, "No Reset On Close", "NoResetOnClose"))
         {
-            if (settings.TryGetValue(key, out var value) && bool.TryParse(value?.ToString(), out var noReset) && noReset)
-            {
-                throw new InvalidOperationException(
-                    "The connection sets No Reset On Close=true: Npgsql would hand the session context — the space "
-                    + "and the actor — to the next user of the pooled connection. Remove it from the connection "
-                    + "string of a database opened in a space.");
-            }
+            throw new InvalidOperationException(
+                "The connection sets No Reset On Close=true: Npgsql would hand the session context — the space "
+                + "and the actor — to the next user of the pooled connection. Remove it from the connection "
+                + "string of a database opened in a space.");
+        }
+        if (IsSet(settings, "Multiplexing"))
+        {
+            throw new InvalidOperationException(
+                "The connection sets Multiplexing=true: Npgsql would send each command on whichever physical "
+                + "connection is free, and the session context — the space and the actor — set by one command would "
+                + "be read by another user's. Remove it from the connection string of a database opened in a space.");
         }
     }
+
+    private static bool IsSet(DbConnectionStringBuilder settings, params string[] keys)
+        => keys.Any(key => settings.TryGetValue(key, out var value) && bool.TryParse(value?.ToString(), out var set) && set);
 }

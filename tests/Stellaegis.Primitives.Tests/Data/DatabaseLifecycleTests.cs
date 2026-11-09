@@ -121,7 +121,8 @@ public sealed class DatabaseLifecycleTests : IAsyncLifetime
         Assert.Contains("InstallAsync", verification.Message);
 
         var installation = await Assert.ThrowsAsync<InvalidOperationException>(() => InstallAsync(Acme, changed));
-        Assert.Contains("drop schema lcw cascade", installation.Message);
+        Assert.Contains("numbered after 0002_widget_tags.sql", installation.Message);
+        Assert.DoesNotContain("drop schema", installation.Message);
     }
 
     [Fact]
@@ -192,6 +193,18 @@ public class ModuleDatabaseTests
         Assert.Equal(SqlScript.ChecksumOf(scripts[0].Sql.Replace("\n", "\r\n") + "\n\n"), scripts[0].Checksum);
         Assert.NotEqual(scripts[0].Checksum, scripts[1].Checksum);
         Assert.Throws<InvalidOperationException>(() => SqlScripts.FromResources(typeof(ModuleDatabaseTests).Assembly, "Nowhere"));
+    }
+
+    // A numbered script misnamed would never be installed, and the verification would pass: the scripts after it are
+    // contiguous all the same, and it is usually the last.
+    [Fact]
+    public void A_misnamed_numbered_script_is_refused_rather_than_left_out()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => SqlScripts.FromResources(typeof(ModuleDatabaseTests).Assembly, "Stellaegis.Primitives.Tests.Data.Sql.Misnamed"));
+
+        Assert.Contains("0002_Add_Index.sql", exception.Message);
+        Assert.DoesNotContain("0001_first.sql", exception.Message);
     }
 
     [Fact]

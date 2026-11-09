@@ -100,6 +100,34 @@ public sealed class AdoSpaceUnitOfWorkTests : IAsyncLifetime
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => factory.OpenAsync(Space.Shared, Jane, Ct));
         Assert.Contains("No Reset On Close", exception.Message);
     }
+
+    // With multiplexing, a command outside a transaction runs on whichever physical connection is free: the context
+    // one sets is read by another's next command (measured: 221 reads of 400 saw the other compartment).
+    [Theory]
+    [InlineData("Host=127.0.0.1;Username=postgres;Multiplexing=true")]
+    [InlineData("Host=127.0.0.1;Username=postgres;multiplexing=True")]
+    public async Task PostgreSql_refuses_a_multiplexed_connection(string connectionString)
+    {
+        var factory = new AdoSpaceUnitOfWorkFactory<WidgetsDatabase>(
+            (_, _) => Task.FromResult<DbConnection>(new NpgsqlConnection(connectionString)),
+            new RepositoryRegistry<WidgetsDatabase>(), SessionContext.PostgreSql);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => factory.OpenAsync(Space.Shared, Jane, Ct));
+        Assert.Contains("Multiplexing", exception.Message);
+    }
+
+    // The adapters open their connections from a data source: the setting is read on the connection all the same.
+    [Fact]
+    public async Task PostgreSql_refuses_a_multiplexed_data_source()
+    {
+        await using var dataSource = NpgsqlDataSource.Create("Host=127.0.0.1;Username=postgres;Multiplexing=true");
+        var factory = new AdoSpaceUnitOfWorkFactory<WidgetsDatabase>(
+            (_, _) => Task.FromResult<DbConnection>(dataSource.CreateConnection()),
+            new RepositoryRegistry<WidgetsDatabase>(), SessionContext.PostgreSql);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => factory.OpenAsync(Space.Shared, Jane, Ct));
+        Assert.Contains("Multiplexing", exception.Message);
+    }
 }
 
 /// <summary>Reads the session context back, as a row-level security policy or an audit trigger would.</summary>

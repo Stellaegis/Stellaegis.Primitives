@@ -45,8 +45,9 @@ internal sealed class PostgreSqlLifecycle : IEngineLifecycle
                 if (!string.Equals(record.Checksum, script.Checksum, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
-                        $"{database.Name}: {script.FileName} was applied with another content. While no real data exists, a script is "
-                        + $"corrected in place and the database reinstalled: drop schema {schema} cascade, then install again.");
+                        $"{database.Name}: {script.FileName} was applied with another content. A script once applied is never "
+                        + "corrected, and the database is never dropped to take it again: restore the script as it was applied, "
+                        + $"and write the change as a script of its own, numbered after {database.Scripts[^1].FileName}.");
                 }
                 skipped.Add($"{database.Name}: {script.FileName}");
                 continue;
@@ -89,7 +90,7 @@ internal sealed class PostgreSqlLifecycle : IEngineLifecycle
             if (!recorded.TryGetValue(script.Version, out var record))
                 faults.Add($"{database.Name}: {script.FileName} is not applied");
             else if (!string.Equals(record.Checksum, script.Checksum, StringComparison.Ordinal))
-                faults.Add($"{database.Name}: {script.FileName} was applied with another content; reinstall the database");
+                faults.Add($"{database.Name}: {script.FileName} was applied with another content; restore the script as it was applied, and write the change as a new numbered script");
         }
         foreach (var version in recorded.Keys.Where(version => version > database.Scripts.Count))
             faults.Add($"{database.Name}: the database holds version {version} ({recorded[version].Name}), which this package does not know");

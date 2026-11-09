@@ -17,25 +17,32 @@ public static class DatabaseVerificationServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the database of a module, with the way the application opens it under its own role — from the
-    /// data source the adapter registers, for instance. An adapter calls it from its own registration, beside its
+    /// data source the adapter registers, for instance —, and its verification at startup
+    /// (<see cref="AddStellaegisDatabaseVerification"/>). An adapter calls it from its own registration, beside its
     /// capabilities:
     /// <code>
     /// services.AddStellaegisModuleDatabase(DocumentsDatabase.Value,
     ///     (provider, ct) => provider.GetRequiredService&lt;NpgsqlDataSource&gt;().OpenConnectionAsync(ct).AsTask());
     /// </code>
     /// </summary>
+    /// <remarks>
+    /// The verification comes with the database, so that no host serves a database it forgot to verify: a rule of
+    /// isolation the frame declares and the database lacks would otherwise go unseen. A process that installs the
+    /// databases does so before starting a host, or builds none.
+    /// </remarks>
     public static IServiceCollection AddStellaegisModuleDatabase(
         this IServiceCollection services, ModuleDatabase database, Func<IServiceProvider, CancellationToken, Task<DbConnection>> openAsApplication)
     {
         Guard.NotNull(services);
         services.AddSingleton(new ModuleDatabaseRegistration(Guard.NotNull(database), Guard.NotNull(openAsApplication)));
-        return services;
+        return services.AddStellaegisDatabaseVerification();
     }
 
     /// <summary>
     /// Registers the verification of every module database at startup, under the application's role: the host
     /// fails to start when a database does not hold with its declaration and the frame
-    /// (<see cref="DatabaseLifecycle.VerifyAsync"/>). Registering it twice registers it once.
+    /// (<see cref="DatabaseLifecycle.VerifyAsync"/>). <see cref="AddStellaegisModuleDatabase"/> registers it; registering
+    /// it again registers it once.
     /// </summary>
     /// <remarks>
     /// A generic host runs its hosted services before anything else. An ASP.NET Core host starts its server
