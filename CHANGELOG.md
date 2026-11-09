@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `Subject`, the person an operation acts upon, named by the `sub` of their tokens: the resource a route that acts on
+  a person loads and asks about, so that the decision sees whom a gesture reaches — `AuthorizeResourceAsync(subject)`,
+  answered by a handler on `OperationRequirement` and `Subject`. The rule of an actor, `job:` refused; `Is(actor)`
+  tells whether the caller is that person, whoever acts on their behalf.
+
 ## [5.4.0] — 2026-10-24
 
 ### Added

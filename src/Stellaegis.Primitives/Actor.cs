@@ -109,7 +109,8 @@ public sealed class Actor : IEquatable<Actor>, IParsable<Actor>
     /// <summary>The identifier of who answers for the operation, <see cref="Value"/>: what a record carries.</summary>
     public override string ToString() => Value;
 
-    private static bool IsValid([NotNullWhen(true)] string? value)
+    // The rule of an identifier that comes from a token, which Subject shares.
+    internal static bool IsValid([NotNullWhen(true)] string? value)
         => value is { Length: > 0 and <= MaxLength }
            && !char.IsWhiteSpace(value[0])
            && !char.IsWhiteSpace(value[^1])

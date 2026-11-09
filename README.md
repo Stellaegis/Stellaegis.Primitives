@@ -902,6 +902,24 @@ in the database: without it, every user reaching the routes accesses every resou
 verification of the module databases at startup is what proves it is there (see *Installing and verifying a
 module's database*).
 
+**A route that acts on a person loads the person.** Blocking an account, resetting its second factor, deactivating
+someone in a directory: the gesture reaches a person, and whether the caller may reach *that* person is part of the
+decision — who may block a colleague may not block the administrator. The route loads a `Subject`, the `sub` of
+the person the operation acts upon, and asks about it; `Subject.Is(actor)` tells whether the caller is that person:
+
+```csharp
+group.MapPost("/{sub}/block", async (string sub, HttpContext http, AccountsService accounts) =>
+    Subject.TryParse(sub, out var subject) && await http.AuthorizeResourceAsync(subject)
+        ? (await accounts.BlockAsync(subject.Value)).ToHttpResult()
+        : Results.NotFound())
+    .WithMetadata(AccountOperations.Block);
+```
+
+The module that holds the people declares the gesture; whatever knows their rights answers, with a handler on
+`OperationRequirement` and `Subject`. Neither depends on the other: both know `Subject`, and the host composes them.
+Without that handler the gesture is refused, as any resource is; a host that lets every caller reach every person
+declares it, `AllowAnyResource()`. A subject is never a piece of work: `job:` is refused.
+
 ### Acting on spaces
 
 A module's administration routes act **on** spaces rather than in one: purging a compartment, reading the secret
