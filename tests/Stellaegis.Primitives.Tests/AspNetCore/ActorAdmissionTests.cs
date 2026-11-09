@@ -191,6 +191,19 @@ public class ActorAdmissionTests
         Assert.Contains("the policy evaluator is replaced", exception.Message);
     }
 
+    // A token issuer asks the admissions itself and may have no authorization: its container, validated at build in
+    // Development, still builds — measured, it refused the evaluator it could not construct.
+    [Fact]
+    public void A_host_without_authorization_builds_its_container_validated()
+    {
+        var services = new ServiceCollection().AddLogging()
+            .AddStellaegisActorAdmission(_ => new Refusing("Account.Blocked", "john"))
+            .AddStellaegisActorAdmissions();
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+        Assert.NotNull(provider.GetRequiredService<IActorAdmissions>());
+    }
+
     [Fact]
     public async Task The_question_is_asked_apart_from_the_middleware_by_a_token_issuer()
     {

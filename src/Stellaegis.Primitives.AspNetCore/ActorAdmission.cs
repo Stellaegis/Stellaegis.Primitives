@@ -113,7 +113,13 @@ public static class ActorAdmissionServiceCollectionExtensions
     {
         services.TryAddSingleton<IActorAdmissions, ActorAdmissions>();
         services.TryAddSingleton<ActorAdmissionPipeline>();
-        services.Replace(ServiceDescriptor.Transient<IPolicyEvaluator, AdmittingPolicyEvaluator>());
+        // By a factory: a host without authorization — a token issuer asking the admissions itself — has no
+        // IAuthorizationService to build the evaluator with, and a container validated at build would refuse it. Nothing
+        // asks for the evaluator there.
+        services.Replace(ServiceDescriptor.Transient<IPolicyEvaluator>(provider => new AdmittingPolicyEvaluator(
+            provider.GetRequiredService<IAuthorizationService>(),
+            provider.GetRequiredService<IActorAdmissions>(),
+            provider.GetRequiredService<ILogger<AdmittingPolicyEvaluator>>())));
         return services.AddStellaegisStartupCheck();
     }
 }
