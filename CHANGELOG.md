@@ -7,8 +7,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [5.6.0] — 2026-11-09
+
 A security release: what an assembly forgot, or a configuration allowed, no longer opens anything. ⚠ A host that
 assembled one of these configurations now fails, at startup or at its first unit of work, saying what to change.
+
+### Updating from 5.5.0
+
+Nothing changes in the code of a module that holds; what follows is what the startup now refuses, and its way out.
+Each was met by rehearsing the family on this version before publishing it.
+
+1. **Microsoft.Extensions 10.0.14**, which Primitives requires since 5.5.0: a package that pins an older one fails to
+   restore on a downgrade (NU1605).
+2. **The application connects with its own role.** On PostgreSQL, the verification of the databases — now
+   registered with each module database, and run before any hosted service — refuses a superuser, a `BYPASSRLS`
+   role and the owner of the schema. A test that verifies under `postgres` connects with the role the installation
+   grants; a host test that starts on a PostgreSQL store meets the verification it did not have.
+3. **A route of a module carries an operation, or declares who may call it**, `RequireAuthorization(...)` or
+   `AllowAnonymous()`; a fallback policy does not count.
+4. **Admissions registered are asked**: a host calls `UseStellaegisActorAdmission()` — a branch of `UseWhen`, such as
+   every route but the protocol routes of a token issuer, counts — and keeps the policy evaluator the admissions
+   register.
+5. **A client in plain http to another machine declares `AllowPlainHttp`** — a test calling `http://h` included —; a
+   base address carries no query, fragment nor credentials.
+6. **A 401 or a 403 of an internal call reads as `Failure`**: a client that relayed it as a refusal of the person now
+   raises what it raises for a failure — 500 to its caller. A client whose service refuses by design reads the code.
+7. **A token naming `job:…` or the anonymous actor fails the request**; a module reading actors from claims itself
+   reads them with `Actor.TryParseClaim`.
 
 ### Added
 
@@ -40,6 +65,7 @@ assembled one of these configurations now fails, at startup or at its first unit
   `AddStellaegisFrame` replaced the frame in silence, the compartment directory listing the first one. The
   validation refuses more than one frame, a fixed directory listing another compartment than the frame's, and a
   single-compartment frame without its directory — an index error until now.
+- **The tests run on xunit 4 and Microsoft.Testing.Platform**, a skipped test failing the publication as before.
 - **`.Hosting`, `.Data` — the validation and the verification run before any hosted service starts**, while the host
   is starting: a hosted service registered first started before the validation failed the host, and an ASP.NET Core
   host served before its databases were verified.
@@ -564,7 +590,8 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
-[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.5.0...HEAD
+[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.6.0...HEAD
+[5.6.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.5.0...v5.6.0
 [5.5.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.4.0...v5.5.0
 [5.4.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.3.0...v5.4.0
 [5.3.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.2.0...v5.3.0
