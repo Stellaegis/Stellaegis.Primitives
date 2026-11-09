@@ -7,12 +7,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [5.5.0] — 2026-11-09
+
 ### Added
 
 - `Subject`, the person an operation acts upon, named by the `sub` of their tokens: the resource a route that acts on
   a person loads and asks about, so that the decision sees whom a gesture reaches — `AuthorizeResourceAsync(subject)`,
   answered by a handler on `OperationRequirement` and `Subject`. The rule of an actor, `job:` refused; `Is(actor)`
   tells whether the caller is that person, whoever acts on their behalf.
+
+### Changed
+
+- The Microsoft.Extensions dependencies move to 10.0.14.
 
 ## [5.4.0] — 2026-10-24
 
@@ -482,7 +488,8 @@ First release.
 - `SnakeCaseTypeMap<T>` and `[ColumnMap]`: a Dapper column map from snake_case to PascalCase, for classes
   and positional records.
 
-[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.4.0...HEAD
+[Unreleased]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.5.0...HEAD
+[5.5.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.4.0...v5.5.0
 [5.4.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.3.0...v5.4.0
 [5.3.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.2.0...v5.3.0
 [5.2.0]: https://github.com/Stellaegis/Stellaegis.Primitives/compare/v5.1.0...v5.2.0
