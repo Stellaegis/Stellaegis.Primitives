@@ -985,6 +985,15 @@ request answers 401 with the problem details of the error, its code telling whic
 request goes on, there is nobody to refuse. `IActorAdmissions` asks the same question apart from the pipeline, for a
 token issuer deciding an authorization or a refresh: `AddStellaegisActorAdmissions()` registers it alone.
 
+The door is not the only place a request is authenticated: a policy naming its own schemes authenticates it again,
+in the authorization — a bearer on a host whose default scheme is the cookie. The admissions are asked there too:
+registering them replaces the policy evaluator of ASP.NET Core by one that asks them about the principal it
+authenticated, whatever its scheme. A principal refused there becomes anonymous: the authorization challenges it,
+and a route open to anyone sees nobody. The startup check fails a host that registers admissions and never calls
+`UseStellaegisActorAdmission()` — on its pipeline or on a branch of it —, or that replaces the policy evaluator after
+them. Called before `UseAuthentication()`, the middleware sees no principal: the routes requiring an authorization
+stay kept, by the evaluator, and the others do not.
+
 ⚠ A host that enables the middleware without any admission registered admits nothing more than the authentication
 did. The admissions come from the modules — the accounts module for the blocked accounts, the token issuer for the
 revoked tokens —, not from this package.
@@ -1011,7 +1020,9 @@ routes and the way out, when:
   counting;
 - it has neither an authorization handler for operations nor `AllowAnyResource()`, and does not declare
   that it loads no resource;
-- a policy it requires is not registered.
+- a policy it requires is not registered;
+- admissions are registered and the pipeline never calls `UseStellaegisActorAdmission()`, or the policy evaluator
+  that asks them is replaced.
 
 Handler detection resolves the registered handlers, so a handler registered by a factory is seen. It
 cannot know which resources a handler covers: one handler for `OperationRequirement` is enough to pass, and a handler

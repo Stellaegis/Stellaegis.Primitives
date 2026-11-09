@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -71,6 +74,13 @@ public static class ActorAdmissionServiceCollectionExtensions
     /// own from its registration; the host enables the question on its pipeline with
     /// <see cref="ActorAdmissionApplicationBuilderExtensions.UseStellaegisActorAdmission"/>.
     /// </summary>
+    /// <remarks>
+    /// The admissions are also asked wherever the authorization authenticates — a policy naming its own schemes
+    /// authenticates the request again, after the door —, so that a bearer refused is refused on a route whose policy
+    /// names the bearer while the cookie is the default. And the startup check
+    /// (<see cref="StartupCheckServiceCollectionExtensions.AddStellaegisStartupCheck"/>, registered here) fails a host
+    /// that registers admissions and never calls <c>UseStellaegisActorAdmission()</c>.
+    /// </remarks>
     public static IServiceCollection AddStellaegisActorAdmission<TAdmission>(this IServiceCollection services)
         where TAdmission : class, IActorAdmission
     {
@@ -102,7 +112,9 @@ public static class ActorAdmissionServiceCollectionExtensions
     private static IServiceCollection Admissions(IServiceCollection services)
     {
         services.TryAddSingleton<IActorAdmissions, ActorAdmissions>();
-        return services;
+        services.TryAddSingleton<ActorAdmissionPipeline>();
+        services.Replace(ServiceDescriptor.Transient<IPolicyEvaluator, AdmittingPolicyEvaluator>());
+        return services.AddStellaegisStartupCheck();
     }
 }
 
@@ -123,15 +135,59 @@ public static class ActorAdmissionApplicationBuilderExtensions
     /// the middleware has nobody to ask, and lets every request through. The admissions come from the modules —
     /// the accounts module for the blocked accounts, the token issuer for the revoked tokens —, each registered
     /// by <see cref="ActorAdmissionServiceCollectionExtensions.AddStellaegisActorAdmission{TAdmission}(IServiceCollection)"/>.
+    /// Called before <c>UseAuthentication()</c>, it sees no principal: the routes requiring an authorization are kept
+    /// all the same, the authorization asking the admissions itself, and the others are not.
     /// </remarks>
     public static IApplicationBuilder UseStellaegisActorAdmission(this IApplicationBuilder app)
     {
         Guard.NotNull(app);
+        app.ApplicationServices.GetService<ActorAdmissionPipeline>()?.Enable();   // a branch of UseWhen counts
         if (app.Properties.ContainsKey(Enabled))
             return app;
         app.Properties[Enabled] = true;
         return app.UseMiddleware<ActorAdmissionMiddleware>();
     }
+}
+
+/// <summary>
+/// Whether the host put the admission on its pipeline, on the whole of it or on a branch: the properties of a branch do
+/// not reach the application, a singleton does.
+/// </summary>
+internal sealed class ActorAdmissionPipeline
+{
+    private int _enabled;
+
+    public bool Enabled => Volatile.Read(ref _enabled) == 1;
+
+    public void Enable() => Interlocked.Exchange(ref _enabled, 1);
+}
+
+/// <summary>
+/// The policy evaluator of ASP.NET Core, asking the admissions about the principal the authorization authenticated:
+/// a policy naming its own schemes authenticates the request again, after the door, and a principal the door never
+/// saw — a revoked bearer on a host whose default scheme is the cookie — would otherwise be served (measured, 200).
+/// A principal refused becomes anonymous: the authorization challenges it, and a route open to anyone sees nobody.
+/// </summary>
+internal sealed class AdmittingPolicyEvaluator(IAuthorizationService authorization, IActorAdmissions admissions, ILogger<AdmittingPolicyEvaluator> logger)
+    : IPolicyEvaluator
+{
+    private readonly PolicyEvaluator _inner = new(authorization);
+
+    public async Task<AuthenticateResult> AuthenticateAsync(AuthorizationPolicy policy, HttpContext context)
+    {
+        var result = await _inner.AuthenticateAsync(policy, context).ConfigureAwait(false);
+        if (!result.Succeeded || result.Principal is not { } principal)
+            return result;
+        var admitted = await admissions.AdmitAsync(principal, context.RequestAborted).ConfigureAwait(false);
+        if (admitted.IsSuccess)
+            return result;
+        logger.LogWarning("Request refused at the authorization on {Path}: {Code}", context.Request.Path, admitted.Error!.Code);
+        context.User = new ClaimsPrincipal(new ClaimsIdentity());
+        return AuthenticateResult.Fail(admitted.Error.Message);
+    }
+
+    public Task<PolicyAuthorizationResult> AuthorizeAsync(AuthorizationPolicy policy, AuthenticateResult authenticationResult, HttpContext context, object? resource)
+        => _inner.AuthorizeAsync(policy, authenticationResult, context, resource);
 }
 
 /// <summary>The middleware behind <see cref="ActorAdmissionApplicationBuilderExtensions.UseStellaegisActorAdmission"/>.</summary>

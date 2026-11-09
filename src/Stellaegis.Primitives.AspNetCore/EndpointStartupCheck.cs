@@ -44,6 +44,8 @@ internal sealed class EndpointStartupCheck : IStartupFilter
         frame.Validate(modules);
         CheckRequestContext(services, frame);
 
+        CheckActorAdmission(services);
+
         var endpoints = services.GetService<EndpointDataSource>()?.Endpoints ?? [];
         CheckEndpointNames(endpoints);
         CheckRequestContextRegistered(services, endpoints);
@@ -86,6 +88,31 @@ internal sealed class EndpointStartupCheck : IStartupFilter
             throw new InvalidOperationException(
                 $"The application frame ({frame}) has many compartments, and the request context declares no source to read "
                 + "each request's from: declare one, such as AddStellaegisRequestContext(c => c.CompartmentFromRoute(\"org\")).");
+        }
+    }
+
+    // An admission registered and never asked lets a blocked account or a revoked token through, whatever the module
+    // that registered it meant: the host forgot UseStellaegisActorAdmission(), or replaced the policy evaluator that
+    // asks it where the authorization authenticates.
+    private static void CheckActorAdmission(IServiceProvider services)
+    {
+        if (services.GetService<IServiceProviderIsService>()?.IsService(typeof(IActorAdmission)) != true)
+            return;
+        if (services.GetService<ActorAdmissionPipeline>() is { Enabled: false })
+        {
+            throw new InvalidOperationException(
+                "Admissions are registered — a blocked account, a revoked token — and the pipeline never asks them: call "
+                + "app.UseStellaegisActorAdmission() after app.UseAuthentication() and before app.UseAuthorization().");
+        }
+        if (services.GetService<IServiceProviderIsService>()?.IsService(typeof(IAuthorizationService)) != true)
+            return;   // no authorization, nothing authenticates after the door
+        using var scope = services.CreateScope();
+        if (scope.ServiceProvider.GetService<Microsoft.AspNetCore.Authorization.Policy.IPolicyEvaluator>() is { } evaluator
+            && evaluator is not AdmittingPolicyEvaluator)
+        {
+            throw new InvalidOperationException(
+                $"Admissions are registered, and the policy evaluator is replaced ({evaluator.GetType().FullName}): the "
+                + "principal a policy authenticates with its own schemes would not be asked. Remove the replacement.");
         }
     }
 

@@ -1,10 +1,17 @@
 using System.Net;
 using System.Security.Claims;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Stellaegis.Primitives.AspNetCore;
 
 namespace Stellaegis.Primitives.Tests.AspNetCore;
@@ -87,6 +94,101 @@ public class ActorAdmissionTests
         await using var app = await StartAsync();
 
         Assert.Equal(HttpStatusCode.OK, (await app.GetTestClient().SendAsync(TestApp.Request("/ping", ("sub", "john")), Ct)).StatusCode);
+    }
+
+    // A second scheme, "bearer", reading the X-Bearer header; the default stays "cookie", reading X-Cookie.
+    private sealed class HeaderScheme(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
+        : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var header = Scheme.Name == "bearer" ? "X-Bearer" : "X-Cookie";
+            return Task.FromResult(Request.Headers.TryGetValue(header, out var value)
+                ? AuthenticateResult.Success(new AuthenticationTicket(
+                    new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", value.ToString())], Scheme.Name)), Scheme.Name))
+                : AuthenticateResult.NoResult());
+        }
+    }
+
+    private static async Task<WebApplication> StartTwoSchemesAsync(Action<IServiceCollection>? services = null, Action<WebApplication>? pipeline = null)
+    {
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = "Production" });
+        builder.WebHost.UseTestServer();
+        builder.Logging.ClearProviders();
+        builder.Services.AddAuthentication("cookie")
+            .AddScheme<AuthenticationSchemeOptions, HeaderScheme>("cookie", null)
+            .AddScheme<AuthenticationSchemeOptions, HeaderScheme>("bearer", null);
+        builder.Services.AddAuthorization(options =>
+            options.AddPolicy("api", policy => policy.AddAuthenticationSchemes("bearer").RequireAuthenticatedUser()));
+        builder.Services.AddStellaegisActorAdmission(_ => new Refusing("Token.Revoked", "jane"));
+        services?.Invoke(builder.Services);
+        var app = builder.Build();
+        app.UseAuthentication();
+        (pipeline ?? (a => a.UseStellaegisActorAdmission()))(app);
+        app.UseAuthorization();
+        app.MapGet("/api", () => "served").RequireAuthorization("api");
+        app.MapGet("/api/open", (HttpContext http) => http.User.FindFirst("sub")?.Value ?? "nobody")
+            .RequireAuthorization("api").AllowAnonymous();
+        await app.StartAsync(Ct);
+        return app;
+    }
+
+    private static HttpRequestMessage Bearer(string path, string subject)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Add("X-Bearer", subject);
+        return request;
+    }
+
+    // A policy naming its own schemes authenticates again, after the door: measured before 5.6.0, the revoked bearer
+    // of jane was served, 200, on a host whose default scheme is the cookie.
+    [Fact]
+    public async Task A_principal_a_policy_authenticates_with_its_own_schemes_meets_the_admission()
+    {
+        await using var app = await StartTwoSchemesAsync();
+        var client = app.GetTestClient();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(Bearer("/api", "jane"), Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Bearer("/api", "john"), Ct)).StatusCode);
+        Assert.Equal("nobody", await (await client.SendAsync(Bearer("/api/open", "jane"), Ct)).Content.ReadAsStringAsync(Ct));
+        Assert.Equal("john", await (await client.SendAsync(Bearer("/api/open", "john"), Ct)).Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Admissions_registered_and_never_asked_fail_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => StartTwoSchemesAsync(pipeline: _ => { }));
+
+        Assert.Contains("UseStellaegisActorAdmission()", exception.Message);
+    }
+
+    // The examples of the family put the door on every route but the protocol routes of the issuer: a branch counts.
+    [Fact]
+    public async Task The_admission_on_a_branch_of_the_pipeline_counts()
+    {
+        await using var app = await StartTwoSchemesAsync(pipeline: a =>
+            a.UseWhen(context => !context.Request.Path.StartsWithSegments("/connect"), door => door.UseStellaegisActorAdmission()));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await app.GetTestClient().SendAsync(Bearer("/api", "jane"), Ct)).StatusCode);
+    }
+
+    private sealed class OwnEvaluator(IAuthorizationService authorization) : IPolicyEvaluator
+    {
+        private readonly PolicyEvaluator _inner = new(authorization);
+
+        public Task<AuthenticateResult> AuthenticateAsync(AuthorizationPolicy policy, HttpContext context) => _inner.AuthenticateAsync(policy, context);
+
+        public Task<PolicyAuthorizationResult> AuthorizeAsync(AuthorizationPolicy policy, AuthenticateResult authenticationResult, HttpContext context, object? resource)
+            => _inner.AuthorizeAsync(policy, authenticationResult, context, resource);
+    }
+
+    [Fact]
+    public async Task A_policy_evaluator_replaced_after_the_admissions_fails_the_startup()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            StartTwoSchemesAsync(services => services.AddTransient<IPolicyEvaluator, OwnEvaluator>()));
+
+        Assert.Contains("the policy evaluator is replaced", exception.Message);
     }
 
     [Fact]

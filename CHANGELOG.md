@@ -18,6 +18,13 @@ assembled one of these configurations now fails, at startup or at its first unit
   route now fails the startup unless it declares who may call it, `RequireAuthorization(...)` or `AllowAnonymous()`;
   a fallback policy does not count. A route of no module is unchanged. The check reads the endpoints once built, so
   that nested groups and final conventions are covered: tests now say so.
+- **`.AspNetCore` — the admission is asked wherever the authorization authenticates.** The door asked the admissions
+  about the principal of the default scheme; a policy naming its own schemes authenticated the request again, after
+  it, and a revoked bearer on a host whose default scheme is the cookie was served, 200. Registering an admission
+  now replaces the policy evaluator by one that asks the admissions about the principal it authenticates; a refused
+  principal becomes anonymous. The startup check, which registering an admission now registers, fails a host that
+  registers admissions and never calls `UseStellaegisActorAdmission()` — a branch of `UseWhen` counts —, or replaces
+  the policy evaluator after them.
 - **`.Data` — a multiplexed PostgreSQL connection is refused in a space.** With `Multiplexing=true`, Npgsql sends
   each command outside a transaction on whichever physical connection is free: the session context set for one
   user — the space and the actor — was read by another's next command. `SessionContext.PostgreSql` refuses it, as it
